@@ -15,7 +15,7 @@ from database.db import (
     save_job,
 )
 from filters.ic_filter import is_ic_related
-from filters.job_filter import classify_job
+from filters.job_filter import classify_job, is_vietnam_job
 from summarizers.news_summary import (
     format_technical_summary,
     summarize_article,
@@ -186,6 +186,23 @@ def process_jobs():
     accepted = []
 
     for raw_job in jobs:
+        # Workday result rows already expose their job location. Reject a
+        # clearly non-Vietnam row before opening its detail page; this keeps
+        # global Workday sources such as Cadence from generating hundreds of
+        # unnecessary detail requests during a scheduled run.
+        if (
+            raw_job.get("detail_api_url")
+            and raw_job.get("location")
+            and not is_vietnam_job(raw_job)
+        ):
+            print(
+                f"[JOB REJECT LOCATION] | "
+                f"{raw_job.get('company', '')} | "
+                f"{raw_job.get('title', '')} | "
+                f"{raw_job.get('location', '')}"
+            )
+            continue
+
         # First reject clearly unrelated roles without making another HTTP
         # request. A lower prefilter threshold keeps borderline IC titles for
         # detail inspection.
