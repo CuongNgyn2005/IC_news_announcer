@@ -183,6 +183,7 @@ JOB_SOURCES = [
             "https://careers.amperecomputing.com/"
             "search/jobs.json"
         ),
+        "referer": "https://careers.amperecomputing.com/search/jobs",
         "country_filter": "Vietnam",
         "max_pages": 10,
         "assume_vietnam": False,
