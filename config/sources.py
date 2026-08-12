@@ -23,45 +23,44 @@ NEWS_SOURCES = [
         "priority": 2,
     },
 
+    # ============================================================
+    # MARVELL
+    # ============================================================
 
-# ============================================================
-# MARVELL
-# ============================================================
+    {
+        "name": "Marvell Newsroom",
+        "company": "Marvell",
+        "category": "company_product",
+        "type": "company",
+        "url": "https://www.marvell.com/company/newsroom/press-releases.html",
+        "enabled": False,
+        "priority": 1,
+    },
 
-{
-    "name": "Marvell Newsroom",
-    "company": "Marvell",
-    "category": "company_product",
-    "type": "company",
-    "url": "https://www.marvell.com/company/newsroom/press-releases.html",
-    "enabled": False,
-    "priority": 1,
-},
+    {
+        "name": "Marvell Blogs",
+        "company": "Marvell",
+        "category": "company_product",
+        "type": "html",
+        "url": "https://www.marvell.com/blogs.html",
+        "enabled": False,
+        "priority": 1,
+    },
 
-{
-    "name": "Marvell Blogs",
-    "company": "Marvell",
-    "category": "company_product",
-    "type": "html",
-    "url": "https://www.marvell.com/blogs.html",
-    "enabled": False,
-    "priority": 1,
-},
+    # ============================================================
+    # AMPERE COMPUTING
+    # ============================================================
 
+    {
+        "name": "Ampere Computing Newsroom",
+        "company": "Ampere Computing",
+        "category": "company_product",
+        "type": "company",
+        "url": "https://amperecomputing.com/company/newsroom",
+        "enabled": True,
+        "priority": 1,
+    },
 
-# ============================================================
-# AMPERE COMPUTING
-# ============================================================
-
-{
-    "name": "Ampere Computing Newsroom",
-    "company": "Ampere Computing",
-    "category": "company_product",
-    "type": "company",
-    "url": "https://amperecomputing.com/company/newsroom",
-    "enabled": True,
-    "priority": 1,
-},
     # ============================================================
     # SKYECHIP
     # ============================================================
@@ -75,7 +74,6 @@ NEWS_SOURCES = [
         "enabled": False,
         "priority": 1,
     },
-
 
     # ============================================================
     # HCLTECH
@@ -91,7 +89,6 @@ NEWS_SOURCES = [
         "priority": 1,
     },
 
-
     # ============================================================
     # TRUECHIP
     # ============================================================
@@ -100,12 +97,11 @@ NEWS_SOURCES = [
         "name": "Truechip",
         "company": "Truechip",
         "category": "company_product",
-        "type": "html",
+        "type": "truechip",
         "url": "https://www.truechip.net/",
-        "enabled": False,
+        "enabled": True,
         "priority": 1,
     },
-
 
     # ============================================================
     # INFINEON
@@ -121,7 +117,6 @@ NEWS_SOURCES = [
         "priority": 1,
     },
 
-
     # ============================================================
     # IDEAS2SILICON
     # ============================================================
@@ -135,7 +130,6 @@ NEWS_SOURCES = [
         "enabled": False,
         "priority": 1,
     },
-
 
     # ============================================================
     # OTHER IMPORTANT IC SOURCES
@@ -185,10 +179,6 @@ NEWS_SOURCES = [
 
 # ================================================================
 # JOB SOURCES
-#
-# Do NOT connect these to fetch_news() yet.
-# We'll build a separate job collector after the product/news
-# pipeline is stable.
 # ================================================================
 
 JOB_SOURCES = [
