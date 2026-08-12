@@ -11,11 +11,6 @@ on:
     - cron: "7 15 * * *"
       timezone: "Asia/Ho_Chi_Minh"
   workflow_dispatch:
-  # Temporary one-shot trigger for the final live production validation.
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/ic-watch.yml"
 
 concurrency:
   group: ic-watch-scheduled
