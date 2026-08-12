@@ -28,6 +28,13 @@ FPT_STATIC_PAGE_TITLES = {
     "buck converter",
 }
 
+INFINEON_NEWS_RSS = (
+    "https://news.google.com/rss/search?"
+    "q=site%3Ainfineon.com%2Ftechnology-news+Infineon+"
+    "%28semiconductor+OR+GaN+OR+SiC+OR+chip+OR+power%29+when%3A45d"
+    "&hl=en-US&gl=US&ceid=US%3Aen"
+)
+
 
 def _rss_content(entry):
     values = []
@@ -57,28 +64,17 @@ def _allow_rss_entry(source, entry):
 
 def fetch_rss_news(source):
     print(f"[RSS FETCH] {source['name']}")
-
     feed = feedparser.parse(source["url"])
 
     if feed.bozo:
-        print(
-            f"[RSS WARNING] {source['name']} | "
-            f"{feed.bozo_exception}"
-        )
+        print(f"[RSS WARNING] {source['name']} | {feed.bozo_exception}")
 
-    print(
-        f"[RSS RESULT] {source['name']} | "
-        f"{len(feed.entries)} entries"
-    )
-
+    print(f"[RSS RESULT] {source['name']} | {len(feed.entries)} entries")
     articles = []
 
     for entry in feed.entries[:20]:
         if not _allow_rss_entry(source, entry):
-            print(
-                f"[RSS STATIC REJECT] {source['name']} | "
-                f"{entry.get('title', '').strip()}"
-            )
+            print(f"[RSS STATIC REJECT] {source['name']} | {entry.get('title', '').strip()}")
             continue
 
         articles.append({
@@ -87,18 +83,25 @@ def fetch_rss_news(source):
             "category": source.get("category"),
             "title": entry.get("title", "").strip(),
             "link": entry.get("link", "").strip(),
-            "published": entry.get(
-                "published",
-                entry.get("updated", ""),
-            ),
-            "summary": entry.get(
-                "summary",
-                entry.get("description", ""),
-            ),
+            "published": entry.get("published", entry.get("updated", "")),
+            "summary": entry.get("summary", entry.get("description", "")),
             "content": _rss_content(entry),
         })
 
     return articles
+
+
+def fetch_infineon_news(source):
+    """Prefer the official page; use a narrow indexed feed if it renders empty."""
+    articles = fetch_html_news(source)
+    if articles:
+        return articles
+
+    print("[NEWS FALLBACK] Infineon Technology News | targeted 45-day RSS index")
+    fallback = dict(source)
+    fallback["type"] = "rss"
+    fallback["url"] = INFINEON_NEWS_RSS
+    return fetch_rss_news(fallback)
 
 
 def fetch_news():
@@ -108,12 +111,11 @@ def fetch_news():
         if not source["enabled"]:
             continue
 
-        print(
-            f"\n[FETCH] {source['name']} "
-            f"({source['type']})"
-        )
+        print(f"\n[FETCH] {source['name']} ({source['type']})")
 
-        if source["type"] == "rss":
+        if source.get("name") == "Infineon Technology News":
+            source_articles = fetch_infineon_news(source)
+        elif source["type"] == "rss":
             source_articles = fetch_rss_news(source)
         elif source["type"] == "company":
             source_articles = fetch_company_news(source)
