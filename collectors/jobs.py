@@ -63,11 +63,11 @@ def _request_html(url, params=None):
     return response.text, response.url
 
 
-def _browser_get(url, params=None, accept="text/html"):
+def _browser_get(url, params=None, accept="text/html", referer=None):
     headers = {
         **HEADERS,
         "Accept": accept,
-        "Referer": url,
+        "Referer": referer or url,
     }
 
     if curl_requests is not None:
@@ -301,6 +301,7 @@ def fetch_ttc_jobs(source):
             json_url,
             params={"page": page},
             accept="application/json",
+            referer=source.get("referer", source["url"]),
         )
         payload = response.json()
         entries = payload.get("entries") or []
@@ -313,8 +314,6 @@ def fetch_ttc_jobs(source):
             if not title or not permalink:
                 continue
 
-            # TTC returns a global board. Reject non-Vietnam rows at
-            # collection time before the role classifier sees them.
             if not VIETNAM_LOCATION_PATTERN.search(location):
                 continue
 
@@ -487,8 +486,6 @@ def fetch_jobs():
         ) as error:
             print(f"[JOB ERROR] {source['name']} | {error}")
         except Exception as error:
-            # curl_cffi raises its own request exceptions. Keep one
-            # protected source from stopping all other companies.
             print(f"[JOB ERROR] {source['name']} | {error}")
 
     return _dedupe(jobs)
