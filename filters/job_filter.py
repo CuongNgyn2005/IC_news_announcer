@@ -160,11 +160,13 @@ def _contains(text, term):
 
 
 def is_vietnam_job(job):
+    # Only observed job text counts as Vietnam evidence. country_filter
+    # in sources.py is a requested search scope and must not turn a
+    # non-Vietnam result into a Vietnam result by itself.
     location_text = _normalize(
         " ".join(
             [
                 job.get("location", ""),
-                job.get("country", ""),
                 job.get("context", ""),
             ]
         )
@@ -209,9 +211,6 @@ def classify_job(job, threshold=7):
             best_score = score
             best_terms = list(dict.fromkeys(matched))
 
-    # Some phrases such as "verification & validation" are used in
-    # mechanical engineering too. Require semiconductor evidence when
-    # the match is not already strongly IC-specific.
     if best_score >= threshold and best_role == "Design Verification":
         company = _normalize(job.get("company", ""))
         strong_dv = any(
@@ -233,8 +232,6 @@ def classify_job(job, threshold=7):
             if not has_ic_context:
                 return False, None, best_score, best_terms
         elif not strong_dv and not has_ic_context:
-            # Trusted semiconductor employers may legitimately use
-            # the generic title "Verification Engineer".
             if "verification engineer" not in best_terms:
                 return False, None, best_score, best_terms
 

@@ -63,12 +63,12 @@ class JobFilterTests(unittest.TestCase):
         self.assertTrue(related)
         self.assertEqual(role, "Physical Design")
 
-    def test_non_vietnam_job_is_rejected(self):
+    def test_non_vietnam_job_is_rejected_even_with_source_filter(self):
         related, _, _, _ = classify_job({
             "title": "SoC Verification Engineer",
             "company": "Marvell",
             "location": "Santa Clara, California",
-            "country": "United States",
+            "country": "Vietnam",
             "context": "UVM SystemVerilog",
             "assume_vietnam": False,
         })

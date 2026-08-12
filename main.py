@@ -22,12 +22,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
 
-MAX_NEWS_TO_SEND = int(
-    os.getenv("MAX_NEWS_TO_SEND", "5")
-)
-MAX_JOBS_TO_SEND = int(
-    os.getenv("MAX_JOBS_TO_SEND", "10")
-)
+MAX_NEWS_TO_SEND = int(os.getenv("MAX_NEWS_TO_SEND", "5"))
+MAX_JOBS_TO_SEND = int(os.getenv("MAX_JOBS_TO_SEND", "10"))
 
 
 def send_telegram_message(message):
@@ -37,10 +33,7 @@ def send_telegram_message(message):
             "must be set in .env"
         )
 
-    url = (
-        f"https://api.telegram.org/"
-        f"bot{BOT_TOKEN}/sendMessage"
-    )
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
     response = requests.post(
         url,
@@ -77,9 +70,7 @@ def _make_job_key(job):
         ]
     ).lower()
 
-    return hashlib.sha256(
-        raw.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def process_news():
@@ -95,7 +86,6 @@ def process_news():
             article["ic_score"] = score
             article["keywords"] = keywords
             accepted.append(article)
-
             print(
                 f"[NEWS ACCEPT] {score:2d} | "
                 f"{article['title']} | {keywords}"
@@ -106,10 +96,7 @@ def process_news():
                 f"{article['title']}"
             )
 
-    print(
-        f"\nIC news: {len(accepted)}/{len(articles)}"
-    )
-
+    print(f"\nIC news: {len(accepted)}/{len(articles)}")
     sent_count = 0
 
     for article in accepted:
@@ -117,9 +104,7 @@ def process_news():
             break
 
         if article_exists(article["link"]):
-            print(
-                f"[NEWS DUPLICATE] {article['title']}"
-            )
+            print(f"[NEWS DUPLICATE] {article['title']}")
             continue
 
         tags = " ".join(
@@ -132,9 +117,7 @@ def process_news():
         )
 
         company = article.get("company")
-        company_line = (
-            f"🏢 Company: {company}\n" if company else ""
-        )
+        company_line = f"🏢 Company: {company}\n" if company else ""
 
         message = (
             "📰 IC TECHNOLOGY NEWS\n\n"
@@ -152,18 +135,13 @@ def process_news():
             send_telegram_message(message)
             save_article(article)
             sent_count += 1
-        except (
-            requests.RequestException,
-            RuntimeError,
-        ) as error:
+        except (requests.RequestException, RuntimeError) as error:
             print(
                 f"[TELEGRAM ERROR] "
                 f"{article['title']} | {error}"
             )
 
-    print(
-        f"News finished. Sent {sent_count} new articles."
-    )
+    print(f"News finished. Sent {sent_count} new articles.")
 
 
 def process_jobs():
@@ -181,7 +159,6 @@ def process_jobs():
             job["matched_terms"] = terms
             job["job_key"] = _make_job_key(job)
             accepted.append(job)
-
             print(
                 f"[JOB ACCEPT] {score:2d} | "
                 f"{job.get('company', '')} | "
@@ -223,10 +200,7 @@ def process_jobs():
             )
             continue
 
-        matched = ", ".join(
-            job.get("matched_terms", [])[:5]
-        )
-
+        matched = ", ".join(job.get("matched_terms", [])[:5])
         posted_line = (
             f"🗓 Posted: {job['posted']}\n"
             if job.get("posted")
@@ -237,40 +211,32 @@ def process_jobs():
             "💼 VIETNAM IC JOB\n\n"
             f"{job['title']}\n\n"
             f"🏢 Company: {job.get('company', '')}\n"
-            f"📍 Location: "
-            f"{job.get('location') or 'Vietnam'}\n"
+            f"📍 Location: {job.get('location') or 'Vietnam'}\n"
             f"🎯 Focus: {job.get('role', '')}\n"
             f"{posted_line}"
             f"🔎 Matched: {matched}\n\n"
             f"🔗 {job.get('link', '')}"
         )
 
-        print(
-            f"[JOB SEND] {job['company']} | {job['title']}"
-        )
+        print(f"[JOB SEND] {job['company']} | {job['title']}")
 
         try:
             send_telegram_message(message)
             save_job(job)
             sent_count += 1
-        except (
-            requests.RequestException,
-            RuntimeError,
-        ) as error:
+        except (requests.RequestException, RuntimeError) as error:
             print(
                 f"[TELEGRAM ERROR] {job['title']} | {error}"
             )
 
-    print(
-        f"Jobs finished. Sent {sent_count} new jobs."
-    )
+    print(f"Jobs finished. Sent {sent_count} new jobs.")
 
 
 def main():
+    initialize_database()
     process_news()
     process_jobs()
 
 
 if __name__ == "__main__":
-    initialize_database()
     main()
