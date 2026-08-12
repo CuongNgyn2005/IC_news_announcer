@@ -16,6 +16,7 @@ from database.db import (
 )
 from filters.ic_filter import is_ic_related
 from filters.job_filter import classify_job, is_vietnam_job
+from filters.recency import is_recent_article
 from summarizers.news_summary import (
     format_technical_summary,
     summarize_article,
@@ -108,16 +109,24 @@ def process_news():
     for article in articles:
         related, score, keywords = is_ic_related(article)
 
-        if related:
-            article["ic_score"] = score
-            article["keywords"] = keywords
-            accepted.append(article)
-            print(
-                f"[NEWS ACCEPT] {score:2d} | "
-                f"{article['title']} | {keywords}"
-            )
-        else:
+        if not related:
             print(f"[NEWS REJECT] {score:2d} | {article['title']}")
+            continue
+
+        if not is_recent_article(article):
+            print(
+                f"[NEWS OLD] {article.get('published', '')} | "
+                f"{article['title']}"
+            )
+            continue
+
+        article["ic_score"] = score
+        article["keywords"] = keywords
+        accepted.append(article)
+        print(
+            f"[NEWS ACCEPT] {score:2d} | "
+            f"{article['title']} | {keywords}"
+        )
 
     print(f"\nIC news: {len(accepted)}/{len(articles)}")
 
@@ -186,10 +195,6 @@ def process_jobs():
     accepted = []
 
     for raw_job in jobs:
-        # Workday result rows already expose their job location. Reject a
-        # clearly non-Vietnam row before opening its detail page; this keeps
-        # global Workday sources such as Cadence from generating hundreds of
-        # unnecessary detail requests during a scheduled run.
         if (
             raw_job.get("detail_api_url")
             and raw_job.get("location")
@@ -203,9 +208,6 @@ def process_jobs():
             )
             continue
 
-        # First reject clearly unrelated roles without making another HTTP
-        # request. A lower prefilter threshold keeps borderline IC titles for
-        # detail inspection.
         pre_related, _, pre_score, _ = classify_job(
             raw_job,
             threshold=5,
