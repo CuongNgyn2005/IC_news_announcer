@@ -3,6 +3,7 @@ import feedparser
 from config.sources import NEWS_SOURCES
 from collectors.html_news import fetch_html_news
 from collectors.company_news import fetch_company_news
+from collectors.truechip_news import fetch_truechip_news
 
 
 def fetch_rss_news(source):
@@ -47,7 +48,6 @@ def fetch_news():
     articles = []
 
     for source in NEWS_SOURCES:
-
         if not source["enabled"]:
             continue
 
@@ -61,6 +61,9 @@ def fetch_news():
 
         elif source["type"] == "company":
             source_articles = fetch_company_news(source)
+
+        elif source["type"] == "truechip":
+            source_articles = fetch_truechip_news(source)
 
         elif source["type"] == "html":
             source_articles = fetch_html_news(source)
