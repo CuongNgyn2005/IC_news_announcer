@@ -32,6 +32,7 @@ TARGET_ROLE_RULES = {
     },
     "Physical Design": {
         "physical design": 10,
+        "physical verification": 10,
         "physical implementation": 9,
         "backend implementation": 9,
         "design implementation": 9,
