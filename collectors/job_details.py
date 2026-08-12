@@ -19,7 +19,6 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-
 CITY_RULES = (
     (r"\bho chi minh(?: city)?\b|\bhcmc\b|\bthu duc\b", "Ho Chi Minh City"),
     (r"\bhanoi\b|\bha noi\b", "Hanoi"),
@@ -32,7 +31,6 @@ CITY_RULES = (
     (r"\bcan tho\b", "Can Tho"),
     (r"\bda lat\b", "Da Lat"),
 )
-
 
 TITLE_SENIORITY_RULES = (
     (r"\bstaff\s+to\s+senior\s+staff\b", "Staff / Senior Staff"),
@@ -51,26 +49,11 @@ TITLE_SENIORITY_RULES = (
     (r"\bexperienced\b", "Experienced"),
 )
 
-
 EXPERIENCE_PATTERNS = (
-    re.compile(
-        r"\b(?:(?:at least|min(?:imum)?(?: of)?)\s*)?"
-        r"(\d+)\s*(?:\+|plus)?\s*(?:years?|yrs?)"
-        r"(?:\s+of)?(?:\s+relevant)?\s+experience\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(\d+)\s*(?:-|–|—|to)\s*(\d+)\s*(?:years?|yrs?)"
-        r"(?:\s+of)?(?:\s+relevant)?\s+experience\b",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\bexperience\s*(?:of|:)?\s*(\d+)\s*(?:\+|plus)?"
-        r"\s*(?:years?|yrs?)\b",
-        re.IGNORECASE,
-    ),
+    re.compile(r"\b(?:(?:at least|min(?:imum)?(?: of)?)\s*)?(\d+)\s*(?:\+|plus)?\s*(?:years?|yrs?)(?:\s+of)?(?:\s+relevant)?\s+experience\b", re.IGNORECASE),
+    re.compile(r"\b(\d+)\s*(?:-|–|—|to)\s*(\d+)\s*(?:years?|yrs?)(?:\s+of)?(?:\s+relevant)?\s+experience\b", re.IGNORECASE),
+    re.compile(r"\bexperience\s*(?:of|:)?\s*(\d+)\s*(?:\+|plus)?\s*(?:years?|yrs?)\b", re.IGNORECASE),
 )
-
 
 ENGLISH_PATTERNS = (
     re.compile(r"\bIELTS\b[^\n.;]{0,45}", re.IGNORECASE),
@@ -78,34 +61,12 @@ ENGLISH_PATTERNS = (
     re.compile(r"\bTOEFL\b[^\n.;]{0,45}", re.IGNORECASE),
 )
 
-
 QUALIFICATION_TERMS = (
-    "bachelor",
-    "master",
-    "phd",
-    "degree",
-    "systemverilog",
-    "verilog",
-    "uvm",
-    "vhdl",
-    "rtl",
-    "asic",
-    "soc",
-    "cadence",
-    "synopsys",
-    "primetime",
-    "innovus",
-    "virtuoso",
-    "spectre",
-    "calibre",
-    "place and route",
-    "static timing",
-    "sta",
-    "dft",
-    "atpg",
-    "mbist",
-    "analog layout",
-    "custom layout",
+    "bachelor", "master", "phd", "degree", "systemverilog", "verilog",
+    "uvm", "vhdl", "rtl", "asic", "soc", "cadence", "synopsys",
+    "primetime", "innovus", "virtuoso", "spectre", "calibre",
+    "place and route", "static timing", "sta", "dft", "atpg", "mbist",
+    "analog layout", "custom layout",
 )
 
 
@@ -122,22 +83,11 @@ def _html_to_text(value):
 
 
 def _browser_get(url, accept="text/html", referer=None):
-    headers = {
-        **HEADERS,
-        "Accept": accept,
-        "Referer": referer or url,
-    }
-
+    headers = {**HEADERS, "Accept": accept, "Referer": referer or url}
     if curl_requests is not None:
-        response = curl_requests.get(
-            url,
-            headers=headers,
-            timeout=20,
-            impersonate="chrome",
-        )
+        response = curl_requests.get(url, headers=headers, timeout=20, impersonate="chrome")
         response.raise_for_status()
         return response
-
     response = requests.get(url, headers=headers, timeout=20)
     response.raise_for_status()
     return response
@@ -145,23 +95,15 @@ def _browser_get(url, accept="text/html", referer=None):
 
 def _extract_page_text(response):
     content_type = response.headers.get("content-type", "").lower()
-
     if "json" in content_type:
         payload = response.json()
         info = payload.get("jobPostingInfo", payload)
-        pieces = [
-            info.get("title", ""),
-            info.get("location", ""),
-            info.get("additionalLocations", ""),
-            info.get("jobDescription", ""),
-            info.get("timeType", ""),
-        ]
+        pieces = [info.get("title", ""), info.get("location", ""), info.get("additionalLocations", ""), info.get("jobDescription", ""), info.get("timeType", "")]
         return _clean(" ".join(_html_to_text(piece) for piece in pieces))
 
     soup = BeautifulSoup(response.text, "html.parser")
     for tag in soup(["script", "style", "noscript", "svg", "nav", "footer"]):
         tag.decompose()
-
     root = soup.find("main") or soup.find("article") or soup.body or soup
     return _clean(root.get_text(". ", strip=True))[:30000]
 
@@ -169,9 +111,7 @@ def _extract_page_text(response):
 def _fetch_detail_text(job):
     if job.get("skip_detail_fetch"):
         return ""
-
     urls = []
-
     if job.get("detail_api_url"):
         urls.append((job["detail_api_url"], "application/json"))
     if job.get("link"):
@@ -180,30 +120,22 @@ def _fetch_detail_text(job):
     for url, accept in urls:
         if not str(url).startswith("http"):
             continue
-
         try:
-            response = _browser_get(
-                url,
-                accept=accept,
-                referer=job.get("source_url") or job.get("link"),
-            )
+            response = _browser_get(url, accept=accept, referer=job.get("source_url") or job.get("link"))
             text = _extract_page_text(response)
             if len(text) >= 80:
                 return text
         except Exception:
             continue
-
     return ""
 
 
 def extract_city(text):
     normalized = _clean(text)
     cities = []
-
     for pattern, city in CITY_RULES:
         if re.search(pattern, normalized, flags=re.IGNORECASE) and city not in cities:
             cities.append(city)
-
     return " / ".join(cities)
 
 
@@ -218,84 +150,55 @@ def extract_seniority(title, text=""):
 
 def _sentence_candidates(text):
     cleaned = _clean(text)
-    return [
-        sentence.strip(" -•\t")
-        for sentence in re.split(r"(?<=[.!?])\s+|\s*[•▪●]\s*", cleaned)
-        if len(sentence.strip()) >= 12
-    ]
+    return [sentence.strip(" -•\t") for sentence in re.split(r"(?<=[.!?])\s+|\s*[•▪●]\s*", cleaned) if len(sentence.strip()) >= 12]
 
 
 def extract_experience(text):
     cleaned = _clean(text)
     sentences = _sentence_candidates(cleaned)
-
     for sentence in sentences:
-        if "experience" not in sentence.lower():
-            continue
-        if any(pattern.search(sentence) for pattern in EXPERIENCE_PATTERNS):
+        if "experience" in sentence.lower() and any(pattern.search(sentence) for pattern in EXPERIENCE_PATTERNS):
             return sentence[:220]
-
     for pattern in EXPERIENCE_PATTERNS:
         match = pattern.search(cleaned)
         if match:
             start = max(0, match.start() - 60)
             end = min(len(cleaned), match.end() + 80)
             return cleaned[start:end].strip()[:220]
-
     return "Not stated"
 
 
 def extract_english_requirement(text):
     cleaned = _clean(text)
-
     for pattern in ENGLISH_PATTERNS:
         match = pattern.search(cleaned)
         if match:
             return _clean(match.group(0))[:180]
-
     for sentence in _sentence_candidates(cleaned):
         lower = sentence.lower()
-        if "english" in lower and any(
-            term in lower
-            for term in (
-                "fluent",
-                "fluency",
-                "proficient",
-                "proficiency",
-                "communication",
-                "communicate",
-                "written",
-                "spoken",
-                "speaking",
-            )
-        ):
+        if "english" in lower and any(term in lower for term in ("fluent", "fluency", "proficient", "proficiency", "communication", "communicate", "written", "spoken", "speaking")):
             return sentence[:220]
-
     return "Not stated"
 
 
 def extract_qualifications(text, limit=4):
     chosen = []
-
     for sentence in _sentence_candidates(text):
         lower = sentence.lower()
-        if not any(term in lower for term in QUALIFICATION_TERMS):
-            continue
-        if sentence in chosen:
+        if not any(term in lower for term in QUALIFICATION_TERMS) or sentence in chosen:
             continue
         chosen.append(sentence[:220])
         if len(chosen) >= limit:
             break
-
     return chosen
 
 
 def extract_job_requirements(title, location, text):
-    # The title/listing location is the strongest location evidence. Only use
-    # the detail page as a fallback; global career pages often mention several
-    # offices and previously polluted one job with another city's name.
-    direct_city = extract_city(f"{title} {location}")
-    city = direct_city or extract_city(text)
+    # Career search titles often include the exact city. Prefer that first,
+    # then the listing location, and only then the broad detail page.
+    title_city = extract_city(title)
+    location_city = extract_city(location)
+    city = title_city or location_city or extract_city(text)
 
     return {
         "city": city,
@@ -309,27 +212,11 @@ def extract_job_requirements(title, location, text):
 def enrich_job(job):
     enriched = dict(job)
     detail_text = _fetch_detail_text(enriched)
-    existing_context = _clean(
-        " ".join(
-            [
-                enriched.get("title", ""),
-                enriched.get("location", ""),
-                enriched.get("summary", ""),
-                enriched.get("context", ""),
-            ]
-        )
-    )
+    existing_context = _clean(" ".join([enriched.get("title", ""), enriched.get("location", ""), enriched.get("summary", ""), enriched.get("context", "")]))
     combined = _clean(f"{existing_context} {detail_text}")
-
     enriched["context"] = combined[:30000]
-    requirements = extract_job_requirements(
-        enriched.get("title", ""),
-        enriched.get("location", ""),
-        combined,
-    )
+    requirements = extract_job_requirements(enriched.get("title", ""), enriched.get("location", ""), combined)
     enriched.update(requirements)
-
     if requirements["city"]:
         enriched["location"] = f"{requirements['city']}, Vietnam"
-
     return enriched
