@@ -1,6 +1,6 @@
 import html
 import re
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -22,6 +22,13 @@ HEADERS = {
 
 
 NOT_STATED = "Not stated in the source text available to the bot."
+
+
+COMPANY_DOMAINS = {
+    "marvell": "marvell.com",
+    "hcltech": "hcltech.com",
+    "ideas2silicon": "ideas2silicon.com",
+}
 
 
 FIELD_RULES = {
@@ -174,7 +181,9 @@ def _clean(text):
 
 
 def _html_to_text(value):
-    soup = BeautifulSoup(value or "", "html.parser")
+    if not isinstance(value, str):
+        value = str(value or "")
+    soup = BeautifulSoup(value, "html.parser")
     return _clean(soup.get_text(" ", strip=True))
 
 
@@ -200,31 +209,74 @@ def _browser_get(url):
     return response
 
 
+def _page_text(response):
+    soup = BeautifulSoup(response.text, "html.parser")
+    for tag in soup(
+        ["script", "style", "noscript", "svg", "nav", "footer", "aside"]
+    ):
+        tag.decompose()
+
+    root = soup.find("article") or soup.find("main") or soup.body or soup
+    paragraphs = [
+        _clean(node.get_text(" ", strip=True))
+        for node in root.find_all(["p", "li"])
+    ]
+    paragraphs = [text for text in paragraphs if len(text) >= 35]
+    return _clean(" ".join(paragraphs))[:40000]
+
+
+def _google_source_link(response, article):
+    soup = BeautifulSoup(response.text, "html.parser")
+    company = _clean(article.get("company", "")).lower()
+    preferred_domain = COMPANY_DOMAINS.get(company, "")
+    external = []
+
+    for anchor in soup.find_all("a", href=True):
+        href = urljoin(response.url, anchor.get("href", ""))
+        host = urlparse(href).netloc.lower()
+        if not href.startswith("http"):
+            continue
+        if any(
+            blocked in host
+            for blocked in (
+                "google.com",
+                "googleusercontent.com",
+                "gstatic.com",
+                "youtube.com",
+            )
+        ):
+            continue
+        external.append(href)
+
+    if preferred_domain:
+        for href in external:
+            if preferred_domain in urlparse(href).netloc.lower():
+                return href
+
+    return external[0] if external else ""
+
+
 def _fetch_article_text(article):
     link = _clean(article.get("link", ""))
     if not link.startswith("http"):
         return ""
 
-    host = urlparse(link).netloc.lower()
-    if "news.google.com" in host:
-        return ""
-
     try:
         response = _browser_get(link)
-        soup = BeautifulSoup(response.text, "html.parser")
+        host = urlparse(response.url).netloc.lower()
 
-        for tag in soup(
-            ["script", "style", "noscript", "svg", "nav", "footer", "aside"]
-        ):
-            tag.decompose()
+        if "news.google.com" in host:
+            source_link = _google_source_link(response, article)
+            if source_link:
+                try:
+                    source_response = _browser_get(source_link)
+                    source_text = _page_text(source_response)
+                    if source_text:
+                        return source_text
+                except Exception:
+                    pass
 
-        root = soup.find("article") or soup.find("main") or soup.body or soup
-        paragraphs = [
-            _clean(node.get_text(" ", strip=True))
-            for node in root.find_all(["p", "li"])
-        ]
-        paragraphs = [text for text in paragraphs if len(text) >= 35]
-        return _clean(" ".join(paragraphs))[:40000]
+        return _page_text(response)
     except Exception:
         return ""
 
@@ -238,14 +290,12 @@ def _sentences(text):
     return [chunk.strip() for chunk in chunks if 20 <= len(chunk.strip()) <= 700]
 
 
-def _score_sentence(sentence, terms, require_metric=False):
+def _score_sentence(sentence, terms):
     lower = sentence.lower()
     score = sum(2 for term in terms if term in lower)
 
     if TECH_METRIC_PATTERN.search(sentence):
         score += 3
-    if require_metric and not TECH_METRIC_PATTERN.search(sentence):
-        score -= 4
     if any(
         cue in lower
         for cue in (
@@ -274,11 +324,12 @@ def _best_sentence(sentences, terms, require_metric=False, extra_check=None):
         lower = sentence.lower()
         if not any(term in lower for term in terms):
             continue
+        if require_metric and not TECH_METRIC_PATTERN.search(sentence):
+            continue
         if extra_check and not extra_check(sentence):
             continue
 
-        score = _score_sentence(sentence, terms, require_metric=require_metric)
-        candidates.append((score, sentence))
+        candidates.append((_score_sentence(sentence, terms), sentence))
 
     if not candidates:
         return NOT_STATED
