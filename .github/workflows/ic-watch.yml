@@ -1,0 +1,97 @@
+name: IC Watch Scheduled Run
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+      timezone: "Asia/Ho_Chi_Minh"
+    - cron: "0 15 * * *"
+      timezone: "Asia/Ho_Chi_Minh"
+  workflow_dispatch:
+
+concurrency:
+  group: ic-watch-scheduled
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect-and-announce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      # Zero means unlimited for scheduled runs. The first persistent run is a
+      # baseline and sends nothing, so subsequent runs only announce new items.
+      MAX_NEWS_TO_SEND: "0"
+      MAX_JOBS_TO_SEND: "0"
+
+    steps:
+      - name: Check out bot
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate Telegram secrets
+        shell: bash
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHANNEL_ID" ]; then
+            echo "::error::Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID as repository Actions secrets."
+            exit 1
+          fi
+
+      - name: Restore persistent dedupe state
+        id: state
+        shell: bash
+        run: |
+          mkdir -p data
+          git fetch origin bot-state:refs/remotes/origin/bot-state
+
+          if git show origin/bot-state:state/ic_watch.db > data/ic_watch.db 2>/dev/null && [ -s data/ic_watch.db ]; then
+            echo "baseline=false" >> "$GITHUB_OUTPUT"
+            echo "Restored persistent IC Watch state."
+          else
+            rm -f data/ic_watch.db
+            echo "baseline=true" >> "$GITHUB_OUTPUT"
+            echo "No persistent database yet. This run will baseline current items without sending them."
+          fi
+
+      - name: Run regression tests
+        run: python -m unittest discover -s tests
+
+      - name: Collect and announce
+        env:
+          IC_WATCH_BASELINE_ONLY: ${{ steps.state.outputs.baseline }}
+        run: python main.py
+
+      - name: Persist dedupe state
+        if: ${{ always() && hashFiles('data/ic_watch.db') != '' }}
+        shell: bash
+        run: |
+          cp data/ic_watch.db /tmp/ic_watch.db
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin bot-state:refs/remotes/origin/bot-state
+          git switch -C bot-state-sync origin/bot-state
+          mkdir -p state
+          cp /tmp/ic_watch.db state/ic_watch.db
+          git add state/ic_watch.db
+
+          if git diff --cached --quiet; then
+            echo "Persistent state did not change."
+          else
+            git commit -m "Update IC Watch state [skip ci]"
+            git push origin HEAD:bot-state
+          fi
