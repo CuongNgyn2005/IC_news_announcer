@@ -36,9 +36,50 @@ WORKDAY_SEARCH_TERMS = (
 )
 
 
+ROLE_DISCOVERY_TERMS = (
+    "design verification",
+    "verification engineer",
+    "soc verification",
+    "rtl design",
+    "rtl engineer",
+    "rtl verification",
+    "logic design",
+    "digital design",
+    "physical design",
+    "physical implementation",
+    "backend implementation",
+    "front-end implementation",
+    "frontend implementation",
+    "layout design",
+    "layout engineer",
+    "custom layout",
+    "analog layout",
+    "analog design",
+    "circuit design",
+    "dft engineer",
+    "design for test",
+    "sta engineer",
+    "silicon validation",
+    "hardware validation",
+    "fpga",
+    "ic design trainee",
+    "soc design engineer",
+)
+
+
+DEFAULT_JOB_PATH_HINTS = (
+    "/job/",
+    "/jobs/",
+    "/careers/job/",
+    "/career/",
+    "/tuyen-dung/",
+)
+
+
 VIETNAM_LOCATION_PATTERN = re.compile(
     r"(ho chi minh(?: city)?|hcmc|hanoi|ha noi|da nang|danang|"
-    r"bac ninh|hai phong|binh duong|dong nai|viet\s*nam|vietnam)",
+    r"quy nhon|gia lai|bac ninh|hai phong|binh duong|dong nai|"
+    r"can tho|da lat|viet\s*nam|vietnam)",
     flags=re.IGNORECASE,
 )
 
@@ -129,16 +170,57 @@ def _extract_location(context, default=""):
             "ha noi": "Hanoi, Vietnam",
             "da nang": "Da Nang, Vietnam",
             "danang": "Da Nang, Vietnam",
+            "quy nhon": "Quy Nhon, Vietnam",
+            "gia lai": "Gia Lai, Vietnam",
             "bac ninh": "Bac Ninh, Vietnam",
             "hai phong": "Hai Phong, Vietnam",
             "binh duong": "Binh Duong, Vietnam",
             "dong nai": "Dong Nai, Vietnam",
+            "can tho": "Can Tho, Vietnam",
+            "da lat": "Da Lat, Vietnam",
             "viet nam": "Vietnam",
             "vietnam": "Vietnam",
         }
         return replacements.get(location, match.group(0))
 
     return default
+
+
+def _looks_like_role(text):
+    lower = _clean(text).lower()
+    return any(term in lower for term in ROLE_DISCOVERY_TERMS)
+
+
+def _job_record(source, title, link, context, location="", posted=""):
+    return {
+        "source": source["name"],
+        "source_url": source["url"],
+        "company": source["company"],
+        "title": _clean(title),
+        "link": link,
+        "location": location or _extract_location(
+            context,
+            source.get("default_location", ""),
+        ),
+        "country": "",
+        "posted": _clean(posted),
+        "summary": "",
+        "context": _clean(context),
+        "assume_vietnam": source.get("assume_vietnam", False),
+        "skip_detail_fetch": not source.get("detail_fetch", True),
+    }
+
+
+def _is_job_link(source, url):
+    lower_url = url.lower()
+    hints = tuple(source.get("job_url_hints", ())) + DEFAULT_JOB_PATH_HINTS
+
+    if any(hint.lower() in lower_url for hint in hints):
+        return True
+
+    allowed_domains = source.get("job_link_domains", ())
+    host = urlparse(url).netloc.lower()
+    return any(domain.lower() in host for domain in allowed_domains)
 
 
 def _parse_html_job_page(html, source, page_url):
@@ -154,13 +236,10 @@ def _parse_html_job_page(html, source, page_url):
 
         url = urljoin(page_url, href)
         lower_url = url.lower()
-        is_job_link = (
-            "/job/" in lower_url
-            or "/jobs/" in lower_url
-            or "/careers/job/" in lower_url
-        )
 
-        if not is_job_link:
+        if not _is_job_link(source, url):
+            continue
+        if url.rstrip("/") == page_url.rstrip("/"):
             continue
         if (
             "/search/" in lower_url
@@ -176,24 +255,15 @@ def _parse_html_job_page(html, source, page_url):
             if parent
             else title
         )
-        location = _extract_location(
-            context,
-            source.get("default_location", ""),
-        )
 
-        jobs.append({
-            "source": source["name"],
-            "source_url": source["url"],
-            "company": source["company"],
-            "title": title,
-            "link": url,
-            "location": location,
-            "country": "",
-            "posted": "",
-            "summary": "",
-            "context": context,
-            "assume_vietnam": source.get("assume_vietnam", False),
-        })
+        jobs.append(
+            _job_record(
+                source,
+                title,
+                url,
+                context,
+            )
+        )
 
     return _dedupe(jobs)
 
@@ -221,14 +291,38 @@ def fetch_query_html_jobs(source):
     return _dedupe(jobs)
 
 
-def fetch_catalog_jobs(source):
-    html, _ = _request_html(source["url"])
+def _best_role_cell(cells):
+    for cell in cells:
+        text = _clean(cell.get_text(" ", strip=True))
+        if _looks_like_role(text):
+            return text
+    return ""
+
+
+def _parse_catalog_page(html, source, page_url):
+    """Parse static career catalogs, including tables and simple role lists."""
     soup = BeautifulSoup(html, "html.parser")
     jobs = []
 
+    for row in soup.find_all("tr"):
+        cells = row.find_all(["td", "th"])
+        if not cells:
+            continue
+        title = _best_role_cell(cells)
+        if not title:
+            continue
+        context = _clean(row.get_text(" ", strip=True))
+        anchor = row.find("a", href=True)
+        link = (
+            urljoin(page_url, anchor.get("href", ""))
+            if anchor
+            else page_url
+        )
+        jobs.append(_job_record(source, title, link, context))
+
     for heading in soup.find_all(["h2", "h3", "h4", "h5", "h6"]):
         title = _clean(heading.get_text(" ", strip=True))
-        if len(title) < 6:
+        if len(title) < 6 or not _looks_like_role(title):
             continue
 
         container = heading.find_parent(
@@ -239,24 +333,40 @@ def fetch_catalog_jobs(source):
             if container
             else title
         )
-        location = _extract_location(
-            context,
-            source.get("default_location", ""),
+        anchor = heading.find("a", href=True) or (
+            container.find("a", href=True) if container else None
         )
+        link = (
+            urljoin(page_url, anchor.get("href", ""))
+            if anchor
+            else page_url
+        )
+        jobs.append(_job_record(source, title, link, context))
 
-        jobs.append({
-            "source": source["name"],
-            "source_url": source["url"],
-            "company": source["company"],
-            "title": title,
-            "link": source["url"],
-            "location": location,
-            "country": "",
-            "posted": "",
-            "summary": "",
-            "context": context,
-            "assume_vietnam": source.get("assume_vietnam", False),
-        })
+    for item in soup.find_all("li"):
+        title = _clean(item.get_text(" ", strip=True))
+        if not (6 <= len(title) <= 180) or not _looks_like_role(title):
+            continue
+        anchor = item.find("a", href=True)
+        link = (
+            urljoin(page_url, anchor.get("href", ""))
+            if anchor
+            else page_url
+        )
+        jobs.append(_job_record(source, title, link, title))
+
+    for anchor in soup.find_all("a", href=True):
+        title = _clean(anchor.get_text(" ", strip=True))
+        if not (6 <= len(title) <= 180) or not _looks_like_role(title):
+            continue
+        link = urljoin(page_url, anchor.get("href", ""))
+        parent = anchor.find_parent(["tr", "li", "article", "section", "div"])
+        context = _clean(
+            parent.get_text(" ", strip=True)
+            if parent
+            else title
+        )
+        jobs.append(_job_record(source, title, link, context))
 
     for node in soup.find_all(string=re.compile(r"Job\s*ID", re.I)):
         text = _clean(node.parent.get_text(" ", strip=True))
@@ -270,27 +380,70 @@ def fetch_catalog_jobs(source):
             flags=re.IGNORECASE,
         ).strip()
 
-        if len(title) < 6:
+        if len(title) < 6 or not _looks_like_role(title):
             continue
 
-        jobs.append({
-            "source": source["name"],
-            "source_url": source["url"],
-            "company": source["company"],
-            "title": title,
-            "link": source["url"],
-            "location": _extract_location(
-                text,
-                source.get("default_location", ""),
-            ),
-            "country": "",
-            "posted": "",
-            "summary": "",
-            "context": text,
-            "assume_vietnam": source.get("assume_vietnam", False),
-        })
+        jobs.append(_job_record(source, title, page_url, text))
 
     return _dedupe(jobs)
+
+
+def fetch_catalog_jobs(source):
+    html, page_url = _request_html(source["url"])
+    return _parse_catalog_page(html, source, page_url)
+
+
+def _parse_smartrecruiters_page(html, source, page_url):
+    """Parse the public SmartRecruiters career page while preserving city groups."""
+    soup = BeautifulSoup(html, "html.parser")
+    jobs = []
+    current_location = ""
+
+    for node in soup.find_all(["h3", "a"]):
+        if node.name == "h3":
+            heading = _clean(node.get_text(" ", strip=True))
+            current_location = (
+                heading
+                if VIETNAM_LOCATION_PATTERN.search(heading)
+                else ""
+            )
+            continue
+
+        if not current_location:
+            continue
+
+        href = _clean(node.get("href", ""))
+        title = _clean(node.get_text(" ", strip=True))
+        if not href or not title:
+            continue
+
+        url = urljoin(page_url, href)
+        if "jobs.smartrecruiters.com" not in urlparse(url).netloc.lower():
+            continue
+
+        title = re.sub(
+            r"\s+(?:Full[- ]time|Part[- ]time|Contract|Intern)$",
+            "",
+            title,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        jobs.append(
+            _job_record(
+                source,
+                title,
+                url,
+                f"{title} {current_location}",
+                location=_extract_location(current_location, current_location),
+            )
+        )
+
+    return _dedupe(jobs)
+
+
+def fetch_smartrecruiters_jobs(source):
+    html, page_url = _request_html(source["url"])
+    return _parse_smartrecruiters_page(html, source, page_url)
 
 
 def fetch_ttc_jobs(source):
@@ -354,6 +507,7 @@ def fetch_ttc_jobs(source):
                     ]
                 ),
                 "assume_vietnam": False,
+                "skip_detail_fetch": False,
             })
 
         if not entries:
@@ -452,6 +606,7 @@ def fetch_workday_jobs(source):
                         ]
                     ),
                     "assume_vietnam": False,
+                    "skip_detail_fetch": False,
                 })
 
             total = payload.get("total")
@@ -481,6 +636,8 @@ def fetch_jobs():
                 source_jobs = fetch_workday_jobs(source)
             elif source["type"] == "ttc_jobs":
                 source_jobs = fetch_ttc_jobs(source)
+            elif source["type"] == "smartrecruiters_jobs":
+                source_jobs = fetch_smartrecruiters_jobs(source)
             elif source["type"] == "html_jobs":
                 source_jobs = fetch_html_jobs(source)
             elif source["type"] == "query_html_jobs":
