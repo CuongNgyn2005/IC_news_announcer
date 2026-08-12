@@ -102,8 +102,8 @@ the available source text contains an actual metric. Missing facts are shown as
 
 ## Vietnam semiconductor companies monitored
 
-The job-source set is company-first and now covers a broader mix of large
-international design/EDA companies and Vietnam-focused semiconductor teams:
+The job-source set is company-first and now covers 20 large international
+IC/EDA employers and Vietnam-focused semiconductor teams:
 
 - Marvell
 - Ampere Computing
@@ -114,8 +114,10 @@ international design/EDA companies and Vietnam-focused semiconductor teams:
 - Ideas2Silicon
 - Synopsys
 - Qorvo
+- Intel
 - Renesas Electronics
 - Cadence
+- GSME
 - FPT Semiconductor
 - Faraday Technology Vietnam
 - Viettel High Tech
@@ -185,11 +187,13 @@ Some career and newsroom sites are dynamic or protected. Each collector is
 isolated: one source failing logs `[JOB ERROR]`, `[HTML ERROR]` or
 `[COMPANY ERROR]` and does not stop the remaining sources.
 
-Marvell and Cadence use Workday collection; Ampere uses its public careers JSON
-listing with a browser-like TLS client. Renesas uses its public SmartRecruiters
-career page. FPT Semiconductor, Faraday Vietnam, Viettel High Tech, QNSC, NBIV,
-BOS Semiconductors and other smaller teams use their official public career or
-catalog pages where possible.
+Marvell, Intel and Cadence use Workday collection; global Workday rows with an
+explicit non-Vietnam location are discarded before expensive detail-page
+requests. Ampere uses its public careers JSON listing with a browser-like TLS
+client. Renesas uses its public SmartRecruiters career page. Synopsys, Qorvo and
+GSME use their public career listings. FPT Semiconductor, Faraday Vietnam,
+Viettel High Tech, QNSC, NBIV, BOS Semiconductors and other smaller teams use
+their official public career or catalog pages where possible.
 
 A configured `country_filter = "Vietnam"` is a search request, not proof that a
 returned job is in Vietnam. The final filter requires observed Vietnam evidence
