@@ -39,16 +39,16 @@ SENIORITY_RULES = (
     (r"\bjunior\b|\bjr\.?\b", "Junior"),
     (r"\bprincipal\b", "Principal"),
     (r"\bstaff\b", "Staff"),
-    (r"\bsenior\b|\bsr\.?\b", "Senior"),
-    (r"\blead\b", "Lead"),
     (r"\bmanager\b", "Manager"),
+    (r"\blead\b", "Lead"),
+    (r"\bsenior\b|\bsr\.?\b", "Senior"),
     (r"\bmid[- ]level\b|\bintermediate\b", "Mid Level"),
 )
 
 
 EXPERIENCE_PATTERNS = (
     re.compile(
-        r"\b(?:at least|min(?:imum)?(?: of)?\s*)?"
+        r"\b(?:(?:at least|min(?:imum)?(?: of)?)\s*)?"
         r"(\d+)\s*(?:\+|plus)?\s*(?:years?|yrs?)"
         r"(?:\s+of)?(?:\s+relevant)?\s+experience\b",
         re.IGNORECASE,
@@ -109,8 +109,10 @@ def _clean(text):
 
 
 def _html_to_text(value):
-    soup = BeautifulSoup(value or "", "html.parser")
-    return _clean(soup.get_text(" ", strip=True))
+    if not isinstance(value, str):
+        value = str(value or "")
+    soup = BeautifulSoup(value, "html.parser")
+    return _clean(soup.get_text(". ", strip=True))
 
 
 def _browser_get(url, accept="text/html", referer=None):
@@ -155,7 +157,7 @@ def _extract_page_text(response):
         tag.decompose()
 
     root = soup.find("main") or soup.find("article") or soup.body or soup
-    return _clean(root.get_text(" ", strip=True))[:30000]
+    return _clean(root.get_text(". ", strip=True))[:30000]
 
 
 def _fetch_detail_text(job):
