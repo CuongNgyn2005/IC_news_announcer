@@ -128,6 +128,35 @@ class CatalogCollectorTests(unittest.TestCase):
             all(job["location"] == "Quy Nhon, Vietnam" for job in jobs)
         )
 
+    def test_rejects_requirement_sentences_as_job_titles(self):
+        html = """
+        <ul>
+          <li>Design Verification Engineer (Experienced)</li>
+          <li>At least 2 year experience in RTL design and verification</li>
+          <li>Collaborate closely with verification and physical design teams</li>
+          <li>Physical Design Engineer</li>
+        </ul>
+        """
+        source = {
+            "name": "Example",
+            "company": "Example Semi",
+            "url": "https://example.com/careers/",
+            "default_location": "Ho Chi Minh City, Vietnam",
+            "assume_vietnam": True,
+            "detail_fetch": False,
+        }
+
+        jobs = _parse_catalog_page(html, source, source["url"])
+        titles = {job["title"] for job in jobs}
+
+        self.assertEqual(
+            titles,
+            {
+                "Design Verification Engineer (Experienced)",
+                "Physical Design Engineer",
+            },
+        )
+
 
 class SmartRecruitersCollectorTests(unittest.TestCase):
     def test_preserves_vietnam_location_groups(self):
