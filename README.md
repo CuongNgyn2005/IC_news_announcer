@@ -5,8 +5,8 @@ Telegram bot for semiconductor technology news and Vietnam IC-design jobs.
 The bot has two pipelines:
 
 ```text
-News sources -> IC/product filter -> SQLite dedupe -> Telegram
-Job sources  -> Vietnam + IC-role filter -> SQLite dedupe -> Telegram
+News sources -> IC/product filter -> source-text technical summary -> SQLite dedupe -> Telegram
+Job sources  -> IC-role prefilter -> job-detail enrichment -> Vietnam gate -> SQLite dedupe -> Telegram
 ```
 
 ## Job focus
@@ -24,6 +24,48 @@ The job filter prioritizes roles around:
 
 Only Vietnam-targeted roles are announced. The source configuration is in
 `config/sources.py`.
+
+Each accepted job is enriched from the detail page when available. Telegram
+uses the `JOBS ALERT` format and reports:
+
+- exact job title
+- company
+- Vietnam city when the source exposes one
+- normalized seniority such as Intern, Graduate, Junior, Senior, Staff or Principal
+- IC track
+- posted date when available
+- experience requirement
+- IELTS / TOEIC / TOEFL or English requirement when explicitly stated
+- key technical/education qualifications from the source job description
+
+The bot never invents a city, language score or experience requirement. If the
+source does not provide one, the alert says that it is not stated.
+
+## IC technology news summaries
+
+Accepted news is summarized from RSS content and, when reachable, the original
+article body. The Telegram message follows this structure:
+
+```text
+### 1. Core Technical Innovation
+- Engineering Breakthrough
+- Process Node & Fabrication
+- Key Interconnect/Packaging
+
+### 2. Hard Performance Metrics (PPA)
+- Power Efficiency
+- Performance Uplift
+- Area / Density
+
+### 3. Commercial & Scale Highlights
+- Financial/CapEx Footprint
+- Production Status & Timeline
+- Primary Use Case
+```
+
+PPA means Power, Performance and Area. Numeric PPA fields are emitted only when
+the available source text contains an actual metric. Missing facts are shown as
+`Not stated in the source text available to the bot.` instead of being guessed.
 
 ## Companies monitored
 
@@ -61,7 +103,7 @@ Check source reachability:
 python check_sources.py
 ```
 
-Run filter tests:
+Run tests:
 
 ```powershell
 python -m unittest discover -s tests
@@ -77,14 +119,18 @@ Successful Telegram sends are saved in `data/ic_watch.db`.
 
 ## Source behavior
 
-Some career sites are dynamic or protected. Each collector is isolated: one
-source failing logs `[JOB ERROR]` or `[COMPANY ERROR]` and does not stop the
-remaining sources.
+Some career and newsroom sites are dynamic or protected. Each collector is
+isolated: one source failing logs `[JOB ERROR]`, `[HTML ERROR]` or
+`[COMPANY ERROR]` and does not stop the remaining sources.
 
-Marvell jobs use the public Workday career endpoint. Ampere uses its
-Ho Chi Minh City results page. HCLTech and Infineon use their career search
-pages with Vietnam location filters. SkyeChip, Truechip and Ideas2Silicon use
-their public career/catalog pages.
+Marvell jobs use the public Workday career endpoint and its job-detail endpoint.
+Ampere uses the public careers JSON listing with a browser-like TLS client.
+HCLTech and Infineon use their career search pages with Vietnam queries.
+SkyeChip, Truechip and Ideas2Silicon use their public career/catalog pages.
+
+A configured `country_filter = "Vietnam"` is a search request, not proof that a
+returned job is in Vietnam. The final filter requires observed Vietnam evidence
+unless a future source-specific collector can prove the location independently.
 
 Company news is intentionally filtered more strictly than jobs so corporate
 earnings, acquisitions and hiring announcements do not appear as technology
