@@ -11,7 +11,7 @@ on:
     - cron: "7 15 * * *"
       timezone: "Asia/Ho_Chi_Minh"
   workflow_dispatch:
-  # Temporary production-validation trigger; removed after this run.
+  # Temporary final production-validation trigger; removed after this run.
   push:
     branches: [main]
     paths:
