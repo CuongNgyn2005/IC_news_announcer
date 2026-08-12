@@ -28,6 +28,12 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
 MAX_NEWS_TO_SEND = int(os.getenv("MAX_NEWS_TO_SEND", "5"))
 MAX_JOBS_TO_SEND = int(os.getenv("MAX_JOBS_TO_SEND", "10"))
+BASELINE_ONLY = os.getenv("IC_WATCH_BASELINE_ONLY", "0").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 def send_telegram_message(message):
@@ -114,10 +120,25 @@ def process_news():
             print(f"[NEWS REJECT] {score:2d} | {article['title']}")
 
     print(f"\nIC news: {len(accepted)}/{len(articles)}")
+
+    if BASELINE_ONLY:
+        baseline_count = 0
+        for article in accepted:
+            if article_exists(article["link"]):
+                continue
+            save_article(article)
+            baseline_count += 1
+            print(f"[NEWS BASELINE] {article['title']}")
+        print(
+            f"News baseline finished. Recorded {baseline_count} existing articles; "
+            "sent 0."
+        )
+        return
+
     sent_count = 0
 
     for article in accepted:
-        if sent_count >= MAX_NEWS_TO_SEND:
+        if MAX_NEWS_TO_SEND > 0 and sent_count >= MAX_NEWS_TO_SEND:
             break
 
         if article_exists(article["link"]):
@@ -215,10 +236,24 @@ def process_jobs():
     )
 
     print(f"\nTarget Vietnam IC jobs: {len(accepted)}/{len(jobs)}")
+
+    if BASELINE_ONLY:
+        baseline_count = 0
+        for job in accepted:
+            if job_exists(job["job_key"]):
+                continue
+            save_job(job)
+            baseline_count += 1
+            print(f"[JOB BASELINE] {job['company']} | {job['title']}")
+        print(
+            f"Jobs baseline finished. Recorded {baseline_count} existing jobs; sent 0."
+        )
+        return
+
     sent_count = 0
 
     for job in accepted:
-        if sent_count >= MAX_JOBS_TO_SEND:
+        if MAX_JOBS_TO_SEND > 0 and sent_count >= MAX_JOBS_TO_SEND:
             break
 
         if job_exists(job["job_key"]):
@@ -258,6 +293,8 @@ def process_jobs():
 
 def main():
     initialize_database()
+    if BASELINE_ONLY:
+        print("IC Watch baseline mode: recording current accepted items without Telegram sends.")
     process_news()
     process_jobs()
 
