@@ -11,9 +11,7 @@ on:
     - cron: "7 15 * * *"
       timezone: "Asia/Ho_Chi_Minh"
   workflow_dispatch:
-  # Temporary one-shot production validation. This commit changes this exact
-  # workflow file, so it exercises the same job immediately. The trigger is
-  # removed again after validation; scheduled production remains unchanged.
+  # Temporary production-validation trigger; removed after this run.
   push:
     branches: [main]
     paths:
@@ -21,7 +19,9 @@ on:
 
 concurrency:
   group: ic-watch-scheduled
-  cancel-in-progress: false
+  # If a stale/slow collection overlaps a newer scheduled run, prefer the
+  # newest source snapshot rather than letting two announcers race the state DB.
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -29,7 +29,7 @@ permissions:
 jobs:
   collect-and-announce:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
