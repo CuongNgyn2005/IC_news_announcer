@@ -68,12 +68,41 @@ def save_article(article):
         )
 
 
-def job_exists(job_key):
+def job_exists(job_key, job=None):
+    """Check exact key and a stable company/title/link identity.
+
+    Location, seniority and role metadata can improve as parsers are fixed. The
+    old job key included location, which could cause an already-announced role
+    to be sent again after a location parser improvement. The stable identity
+    fallback prevents that while still allowing two jobs with the same title
+    when they have different posting URLs.
+    """
     with get_connection() as conn:
         result = conn.execute(
             "SELECT 1 FROM jobs WHERE job_key = ?",
             (job_key,),
         ).fetchone()
+        if result is not None or not job:
+            return result is not None
+
+        company = str(job.get("company", "") or "").strip().lower()
+        title = str(job.get("title", "") or "").strip().lower()
+        url = str(job.get("link", "") or "").strip()
+
+        if not company or not title or not url:
+            return False
+
+        result = conn.execute(
+            """
+            SELECT 1 FROM jobs
+            WHERE lower(trim(company)) = ?
+              AND lower(trim(title)) = ?
+              AND trim(COALESCE(url, '')) = ?
+            LIMIT 1
+            """,
+            (company, title, url),
+        ).fetchone()
+
     return result is not None
 
 
