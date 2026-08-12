@@ -2,21 +2,17 @@ name: IC Watch Scheduled Run
 
 on:
   schedule:
-    # GitHub documents that schedules at minute 0 are most likely to be
-    # delayed or dropped during Actions load spikes. Run seven minutes after
-    # the requested 09:00 / 15:00 Vietnam windows for substantially better
-    # reliability while keeping the same twice-daily cadence.
-    - cron: "7 9 * * *"
+    # Production policy: exactly one automatic run per day at 09:00 Vietnam
+    # time. There are intentionally no push or workflow_dispatch triggers, so
+    # repository changes and manual dispatches cannot announce outside this
+    # daily window.
+    - cron: "0 9 * * *"
       timezone: "Asia/Ho_Chi_Minh"
-    - cron: "7 15 * * *"
-      timezone: "Asia/Ho_Chi_Minh"
-  workflow_dispatch:
 
 concurrency:
   group: ic-watch-scheduled
-  # If a stale/slow collection overlaps a newer scheduled run, prefer the
-  # newest source snapshot rather than letting two announcers race the state DB.
-  cancel-in-progress: true
+  # Never allow two production announcers to race the persistent state.
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -56,12 +52,15 @@ jobs:
             exit 1
           fi
 
-      - name: Restore persistent dedupe state
+      - name: Restore persistent dedupe state and daily run lock
         id: state
         shell: bash
         run: |
           mkdir -p data
           git fetch origin bot-state:refs/remotes/origin/bot-state
+
+          LOCAL_DATE="$(TZ=Asia/Ho_Chi_Minh date +%F)"
+          echo "local_date=$LOCAL_DATE" >> "$GITHUB_OUTPUT"
 
           if git show origin/bot-state:state/ic_watch.db > data/ic_watch.db 2>/dev/null && [ -s data/ic_watch.db ]; then
             echo "baseline=false" >> "$GITHUB_OUTPUT"
@@ -72,26 +71,48 @@ jobs:
             echo "No persistent database yet. This run will baseline current items without sending them."
           fi
 
+          LAST_RUN="$(git show origin/bot-state:state/last_production_date.txt 2>/dev/null | tr -d '\r\n' || true)"
+          if [ "$LAST_RUN" = "$LOCAL_DATE" ]; then
+            echo "already_ran=true" >> "$GITHUB_OUTPUT"
+            echo "IC Watch production already ran for $LOCAL_DATE; Telegram announcement is disabled for this duplicate run."
+          else
+            echo "already_ran=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run regression tests
         run: python -m unittest discover -s tests
 
       - name: Collect and announce
+        if: steps.state.outputs.already_ran != 'true'
         env:
           IC_WATCH_BASELINE_ONLY: ${{ steps.state.outputs.baseline }}
         run: python main.py
 
-      - name: Persist dedupe state
-        if: ${{ always() && hashFiles('data/ic_watch.db') != '' }}
+      - name: Mark today's production run
+        if: success() && steps.state.outputs.already_ran != 'true'
+        shell: bash
+        run: |
+          echo "${{ steps.state.outputs.local_date }}" > data/last_production_date.txt
+
+      - name: Persist dedupe state and daily run lock
+        if: ${{ always() && steps.state.outputs.already_ran != 'true' && hashFiles('data/ic_watch.db') != '' }}
         shell: bash
         run: |
           cp data/ic_watch.db /tmp/ic_watch.db
+          if [ -f data/last_production_date.txt ]; then
+            cp data/last_production_date.txt /tmp/last_production_date.txt
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin bot-state:refs/remotes/origin/bot-state
           git switch -C bot-state-sync origin/bot-state
           mkdir -p state
           cp /tmp/ic_watch.db state/ic_watch.db
-          git add state/ic_watch.db
+          if [ -f /tmp/last_production_date.txt ]; then
+            cp /tmp/last_production_date.txt state/last_production_date.txt
+          fi
+          git add state/ic_watch.db state/last_production_date.txt 2>/dev/null || git add state/ic_watch.db
 
           if git diff --cached --quiet; then
             echo "Persistent state did not change."
