@@ -118,9 +118,6 @@ VIETNAM_TERMS = {
     "hai phong", "binh duong", "dong nai", "can tho", "da lat",
 }
 
-# Used only against the title/listing-location fields, never the full page.
-# This protects against global career pages where a Romania/Singapore job card
-# is followed by another Vietnam card and both cities leak into one container.
 EXPLICIT_FOREIGN_TERMS = {
     "romania", "bucharest", "singapore", "malaysia", "penang", "india",
     "bangalore", "bengaluru", "hyderabad", "pune", "united states",
@@ -128,6 +125,7 @@ EXPLICIT_FOREIGN_TERMS = {
     "israel", "haifa", "japan", "korea", "taiwan", "hsinchu", "china",
     "shanghai", "beijing", "poland", "germany", "austria", "france",
     "italy", "united kingdom", "uk", "sweden", "oman", "muscat",
+    "ireland", "dublin", "cork", "switzerland", "zurich", "bristol",
 }
 
 
@@ -142,19 +140,31 @@ def _contains(text, term):
     return re.search(pattern, text, flags=re.IGNORECASE) is not None
 
 
-def is_vietnam_job(job):
-    direct_text = _normalize(
-        " ".join([job.get("title", ""), job.get("location", "")])
-    )
+def _has_any(text, terms):
+    return any(_contains(text, term) for term in terms)
 
-    if any(_contains(direct_text, term) for term in VIETNAM_TERMS):
+
+def is_vietnam_job(job):
+    title = _normalize(job.get("title", ""))
+    location = _normalize(job.get("location", ""))
+
+    # Employer search cards such as Infineon's frequently contain the country
+    # directly in the title. Treat that as authoritative over any city leaked
+    # from a broad page/container into derived location metadata.
+    title_has_vietnam = _has_any(title, VIETNAM_TERMS)
+    title_has_foreign = _has_any(title, EXPLICIT_FOREIGN_TERMS)
+    if title_has_foreign and not title_has_vietnam:
+        return False
+    if title_has_vietnam:
         return True
 
-    if any(_contains(direct_text, term) for term in EXPLICIT_FOREIGN_TERMS):
+    if _has_any(location, EXPLICIT_FOREIGN_TERMS) and not _has_any(location, VIETNAM_TERMS):
         return False
+    if _has_any(location, VIETNAM_TERMS):
+        return True
 
     context_text = _normalize(job.get("context", ""))
-    if any(_contains(context_text, term) for term in VIETNAM_TERMS):
+    if _has_any(context_text, VIETNAM_TERMS):
         return True
 
     return bool(job.get("assume_vietnam", False))
