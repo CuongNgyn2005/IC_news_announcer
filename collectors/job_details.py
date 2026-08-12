@@ -34,9 +34,6 @@ CITY_RULES = (
 )
 
 
-# Seniority must come from the actual job title. Broad job-detail pages often
-# mention graduates, junior engineers, managers or leads in unrelated text;
-# using the whole page caused Senior/Staff roles to be mislabeled as Junior.
 TITLE_SENIORITY_RULES = (
     (r"\bstaff\s+to\s+senior\s+staff\b", "Staff / Senior Staff"),
     (r"\bsenior\s*/\s*staff\b|\bsr\.?\s*/\s*staff\b", "Senior / Staff"),
@@ -211,7 +208,7 @@ def extract_city(text):
 
 
 def extract_seniority(title, text=""):
-    del text  # Deliberately avoid unrelated seniority words in page body.
+    del text
     normalized_title = _clean(title)
     for pattern, level in TITLE_SENIORITY_RULES:
         if re.search(pattern, normalized_title, flags=re.IGNORECASE):
@@ -294,8 +291,11 @@ def extract_qualifications(text, limit=4):
 
 
 def extract_job_requirements(title, location, text):
-    combined = _clean(f"{location} {text}")
-    city = extract_city(combined)
+    # The title/listing location is the strongest location evidence. Only use
+    # the detail page as a fallback; global career pages often mention several
+    # offices and previously polluted one job with another city's name.
+    direct_city = extract_city(f"{title} {location}")
+    city = direct_city or extract_city(text)
 
     return {
         "city": city,
