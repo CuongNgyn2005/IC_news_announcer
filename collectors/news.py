@@ -6,6 +6,29 @@ from collectors.company_news import fetch_company_news
 from collectors.truechip_news import fetch_truechip_news
 
 
+FPT_STATIC_PAGE_TITLES = {
+    "power management multi-channel (pmic)",
+    "fas06.8",
+    "osat factory",
+    "load switch",
+    "automotive",
+    "hps",
+    "our applications",
+    "fas eid",
+    "on-job training",
+    "accelerate your ic development with custom ip & solutions",
+    "fas06",
+    "reset your password",
+    "boost converter",
+    "engineering services",
+    "personal electronic devices",
+    "fas02",
+    "our services",
+    "technical resources",
+    "buck converter",
+}
+
+
 def _rss_content(entry):
     values = []
     for item in entry.get("content", []) or []:
@@ -14,6 +37,22 @@ def _rss_content(entry):
             if value:
                 values.append(value)
     return " ".join(values)
+
+
+def _normalized_feed_title(title):
+    value = (title or "").strip().lower()
+    for suffix in (" - fpt semiconductor", " - marvell technology"):
+        if value.endswith(suffix):
+            value = value[: -len(suffix)].strip()
+    return value
+
+
+def _allow_rss_entry(source, entry):
+    if source.get("name") != "FPT Semiconductor News":
+        return True
+
+    title = _normalized_feed_title(entry.get("title", ""))
+    return title not in FPT_STATIC_PAGE_TITLES
 
 
 def fetch_rss_news(source):
@@ -35,6 +74,13 @@ def fetch_rss_news(source):
     articles = []
 
     for entry in feed.entries[:20]:
+        if not _allow_rss_entry(source, entry):
+            print(
+                f"[RSS STATIC REJECT] {source['name']} | "
+                f"{entry.get('title', '').strip()}"
+            )
+            continue
+
         articles.append({
             "source": source["name"],
             "company": source.get("company"),
