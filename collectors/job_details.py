@@ -193,10 +193,13 @@ def _fetch_detail_text(job):
 
 def extract_city(text):
     normalized = _clean(text)
+    cities = []
+
     for pattern, city in CITY_RULES:
-        if re.search(pattern, normalized, flags=re.IGNORECASE):
-            return city
-    return ""
+        if re.search(pattern, normalized, flags=re.IGNORECASE) and city not in cities:
+            cities.append(city)
+
+    return " / ".join(cities)
 
 
 def extract_seniority(title, text=""):
