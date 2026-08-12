@@ -4,8 +4,18 @@ import requests
 from config.sources import JOB_SOURCES, NEWS_SOURCES
 
 
+try:
+    from curl_cffi import requests as curl_requests
+except ImportError:
+    curl_requests = None
+
+
 HEADERS = {
-    "User-Agent": "IC-Watch-Bot/1.0",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
 
@@ -13,7 +23,7 @@ def check_rss(source):
     try:
         response = requests.get(
             source["url"],
-            timeout=15,
+            timeout=20,
             headers=HEADERS,
         )
         status = response.status_code
@@ -37,7 +47,7 @@ def check_html(source):
     try:
         response = requests.get(
             source["url"],
-            timeout=15,
+            timeout=20,
             headers=HEADERS,
         )
         if response.status_code == 200:
@@ -59,7 +69,7 @@ def check_workday(source):
     try:
         response = requests.post(
             endpoint,
-            timeout=15,
+            timeout=20,
             headers={
                 **HEADERS,
                 "Content-Type": "application/json",
@@ -80,6 +90,54 @@ def check_workday(source):
 
     except (requests.RequestException, ValueError) as error:
         return f"ERROR: {error}", None, 0
+
+
+def check_ttc(source):
+    json_url = source.get(
+        "json_url",
+        source["url"].rstrip("/") + "/search/jobs.json",
+    )
+    headers = {
+        **HEADERS,
+        "Accept": "application/json",
+        "Referer": source["url"],
+    }
+
+    try:
+        if curl_requests is not None:
+            response = curl_requests.get(
+                json_url,
+                params={"page": 1},
+                headers=headers,
+                timeout=20,
+                impersonate="chrome",
+            )
+        else:
+            response = requests.get(
+                json_url,
+                params={"page": 1},
+                headers=headers,
+                timeout=20,
+            )
+
+        status = response.status_code
+        if status != 200:
+            return "ERROR", status, 0, 0
+
+        payload = response.json()
+        entries = payload.get("entries") or []
+        total = payload.get("total_entries", len(entries))
+        vietnam_count = sum(
+            1
+            for entry in entries
+            if "vietnam" in str(entry.get("location", "")).lower()
+            or "viet nam" in str(entry.get("location", "")).lower()
+            or "ho chi minh" in str(entry.get("location", "")).lower()
+        )
+        return "REACHABLE", status, total, vietnam_count
+
+    except Exception as error:
+        return f"ERROR: {error}", None, 0, 0
 
 
 def print_news_sources():
@@ -118,6 +176,12 @@ def print_job_sources():
             print(f"Health: {result}")
             print(f"HTTP:   {status}")
             print(f"Probe jobs: {count}")
+        elif source["type"] == "ttc_jobs":
+            result, status, total, vietnam_count = check_ttc(source)
+            print(f"Health: {result}")
+            print(f"HTTP:   {status}")
+            print(f"Total jobs: {total}")
+            print(f"Vietnam rows on page 1: {vietnam_count}")
         else:
             result, status = check_html(source)
             print(f"Health: {result}")
