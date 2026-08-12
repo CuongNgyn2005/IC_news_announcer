@@ -21,6 +21,8 @@ DATE_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 
+SKYE_DATED_POST_PATH = re.compile(r"^/20\d{2}/\d{1,2}/\d{1,2}/[^/]+/?$")
+
 
 def _clean(text):
     return re.sub(r"\s+", " ", text or "").strip()
@@ -54,10 +56,14 @@ def _allowed_article_url(source, url):
     path = parsed.path.lower()
 
     if name == "infineon technology news":
-        return "/technology-news/" in path
+        # Infineon's index lives under /about/press/technology-news, while the
+        # actual article URLs live at /technology-news/YYYY/<article-id>.
+        return path.startswith("/technology-news/") and path.count("/") >= 3
 
     if name == "skyechip media releases":
-        return "/media-release/" in path or "/category/media-release/" in path
+        # SkyeChip's category page does not preserve /media-release/ in the
+        # article permalink; WordPress uses /YYYY/MM/DD/<slug>/ instead.
+        return bool(SKYE_DATED_POST_PATH.match(path))
 
     return True
 
@@ -108,9 +114,6 @@ def extract_links(source):
         date_match = DATE_PATTERN.search(context)
         published = date_match.group(0) if date_match else ""
 
-        # Infineon's technology-news page contains a very large global nav.
-        # A real technology-news card/detail link has a technology-news path;
-        # limit the list to the current page's first reasonable batch.
         seen_urls.add(url)
         articles.append({
             "source": source["name"],
