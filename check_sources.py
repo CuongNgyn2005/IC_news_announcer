@@ -1,6 +1,7 @@
 import feedparser
 import requests
 
+from collectors.jobs import fetch_ampere_jobs
 from config.sources import JOB_SOURCES, NEWS_SOURCES
 
 
@@ -93,6 +94,7 @@ def check_workday(source):
 
 
 def check_ttc(source):
+    """Legacy TTC JSON probe retained for non-Ampere TTC sources."""
     json_url = source.get(
         "json_url",
         source["url"].rstrip("/") + "/search/jobs.json",
@@ -140,6 +142,17 @@ def check_ttc(source):
         return f"ERROR: {error}", None, 0, 0
 
 
+def check_ampere(source):
+    """Exercise the same direct+rendered fallback path used in production."""
+    try:
+        jobs = fetch_ampere_jobs(source)
+        if jobs:
+            return "REACHABLE", len(jobs)
+        return "EMPTY/DEGRADED", 0
+    except Exception as error:
+        return f"ERROR: {error}", 0
+
+
 def print_news_sources():
     print("\nNEWS SOURCES")
     print("=" * 70)
@@ -171,7 +184,11 @@ def print_job_sources():
         print(f"Active: {source['enabled']}")
         print(f"URL:    {source['url']}")
 
-        if source["type"] == "workday":
+        if source["name"] == "Ampere Computing Vietnam Careers":
+            result, count = check_ampere(source)
+            print(f"Health: {result}")
+            print(f"Vietnam jobs: {count}")
+        elif source["type"] == "workday":
             result, status, count = check_workday(source)
             print(f"Health: {result}")
             print(f"HTTP:   {status}")
