@@ -282,7 +282,7 @@ JOB_SOURCES = [
         "priority": 1,
     },
 
-    # Major foreign IC/EDA design centres with current Vietnam openings.
+    # Major foreign IC/EDA design centres with Vietnam engineering activity.
     {
         "name": "Synopsys Vietnam Careers",
         "company": "Synopsys",
@@ -302,6 +302,27 @@ JOB_SOURCES = [
         "country_filter": "Vietnam",
         "default_location": "",
         "assume_vietnam": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "Intel Vietnam Careers",
+        "company": "Intel",
+        "type": "workday",
+        "url": "https://intel.wd1.myworkdayjobs.com/External",
+        "workday_tenant": "intel",
+        "workday_site": "External",
+        "country_filter": "Vietnam",
+        "search_terms": [
+            "design verification",
+            "physical design",
+            "rtl design",
+            "logic design",
+            "layout",
+            "dft",
+            "silicon validation",
+            "fpga",
+        ],
         "enabled": True,
         "priority": 1,
     },
@@ -338,6 +359,18 @@ JOB_SOURCES = [
         ],
         "enabled": True,
         "priority": 2,
+    },
+    {
+        "name": "GSME Vietnam Careers",
+        "company": "GSME",
+        "type": "html_jobs",
+        "url": "https://www.gsme.com/careers",
+        "job_url_hints": ["/job-listings/"],
+        "country_filter": "Vietnam",
+        "default_location": "",
+        "assume_vietnam": False,
+        "enabled": True,
+        "priority": 1,
     },
 
     # Vietnam-headquartered / Vietnam-specific IC design teams.
