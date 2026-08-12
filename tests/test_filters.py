@@ -74,6 +74,29 @@ class JobFilterTests(unittest.TestCase):
         })
         self.assertFalse(related)
 
+    def test_title_role_beats_unrelated_page_context(self):
+        related, role, _, _ = classify_job({
+            "title": "Custom Analog Design",
+            "company": "FPT Semiconductor",
+            "location": "Ho Chi Minh City, Vietnam",
+            "context": (
+                "Company services also include design verification, UVM, "
+                "physical design and DFT."
+            ),
+        })
+        self.assertTrue(related)
+        self.assertEqual(role, "Analog / Custom Layout")
+
+    def test_rtl_title_is_not_reclassified_as_dft_from_context(self):
+        related, role, _, _ = classify_job({
+            "title": "RTL Design Lead",
+            "company": "FPT Semiconductor",
+            "location": "Hanoi, Vietnam",
+            "context": "Team provides DFT, ATPG and physical design services.",
+        })
+        self.assertTrue(related)
+        self.assertEqual(role, "RTL / Logic Design")
+
 
 if __name__ == "__main__":
     unittest.main()
