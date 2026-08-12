@@ -57,12 +57,21 @@ NEWS_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
+
+    # The direct HCLTech newsroom intermittently times out from plain
+    # requests. Use a narrow RSS query so the bot gets semiconductor
+    # announcements without crawling the full corporate newsroom.
     {
         "name": "HCLTech Semiconductor",
         "company": "HCLTech",
         "category": "company_product",
-        "type": "html",
-        "url": "https://www.hcltech.com/press-release?lang=en",
+        "type": "rss",
+        "url": (
+            "https://news.google.com/rss/search?"
+            "q=site%3Ahcltech.com%2Fpress-releases+HCLTech+"
+            "%28semiconductor+OR+silicon+OR+chip%29+when%3A365d"
+            "&hl=en-US&gl=US&ceid=US%3Aen"
+        ),
         "enabled": True,
         "priority": 1,
     },
@@ -84,17 +93,17 @@ NEWS_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
+
+    # Ideas2Silicon currently exposes technology and careers pages but
+    # no stable official news feed. Keep this disabled instead of
+    # repeatedly polling an empty Google News query.
     {
         "name": "Ideas2Silicon News",
         "company": "Ideas2Silicon",
         "category": "company_product",
-        "type": "rss",
-        "url": (
-            "https://news.google.com/rss/search?"
-            "q=%22Ideas2Silicon%22+semiconductor+when%3A90d"
-            "&hl=en-US&gl=US&ceid=US%3Aen"
-        ),
-        "enabled": True,
+        "type": "html",
+        "url": "https://www.ideas2silicon.com/technology.html",
+        "enabled": False,
         "priority": 1,
     },
 
@@ -161,31 +170,41 @@ JOB_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
+
+    # Ampere's TTC/TalentTech HTML board returns 403 to ordinary
+    # requests. Its public JSON listing feed is queried with a
+    # browser-like TLS client and filtered to observed Vietnam rows.
     {
         "name": "Ampere Computing Vietnam Careers",
         "company": "Ampere Computing",
-        "type": "html_jobs",
-        "url": (
+        "type": "ttc_jobs",
+        "url": "https://careers.amperecomputing.com/",
+        "json_url": (
             "https://careers.amperecomputing.com/"
-            "search/jobs/in/ho-chi-minh-city"
+            "search/jobs.json"
         ),
         "country_filter": "Vietnam",
-        "default_location": "Ho Chi Minh City, Vietnam",
-        "assume_vietnam": True,
+        "max_pages": 10,
+        "assume_vietnam": False,
         "enabled": True,
         "priority": 1,
     },
+
+    # SkyeChip has Vietnam entities/offices, but its public careers
+    # catalog does not identify which listed roles are open in Vietnam.
+    # Do not label every global catalog role as Vietnam automatically.
     {
         "name": "SkyeChip Careers",
         "company": "SkyeChip",
         "type": "catalog_jobs",
         "url": "https://skyechip.com/career-opportunities/",
         "country_filter": "Vietnam",
-        "default_location": "Vietnam",
-        "assume_vietnam": True,
+        "default_location": "",
+        "assume_vietnam": False,
         "enabled": True,
         "priority": 1,
     },
+
     {
         "name": "HCLTech Vietnam Careers",
         "company": "HCLTech",
@@ -204,22 +223,27 @@ JOB_SOURCES = [
             "silicon validation",
             "fpga",
         ],
-        "default_location": "Vietnam",
-        "assume_vietnam": True,
+        "default_location": "",
+        "assume_vietnam": False,
         "enabled": True,
         "priority": 1,
     },
+
+    # Truechip's catalog is global and currently does not expose a
+    # Vietnam location on each role, so only explicitly Vietnam-tagged
+    # entries are allowed through the location gate.
     {
         "name": "Truechip Careers",
         "company": "Truechip",
         "type": "catalog_jobs",
         "url": "https://www.truechip.net/explore-careers",
         "country_filter": "Vietnam",
-        "default_location": "Vietnam",
-        "assume_vietnam": True,
+        "default_location": "",
+        "assume_vietnam": False,
         "enabled": True,
         "priority": 1,
     },
+
     {
         "name": "Infineon Vietnam Careers",
         "company": "Infineon Technologies",
@@ -238,19 +262,24 @@ JOB_SOURCES = [
             "dft",
             "validation",
         ],
-        "default_location": "Vietnam",
+        "default_location": "",
         "assume_vietnam": False,
         "enabled": True,
         "priority": 1,
     },
+
+    # The official I2S careers page is a global contact page and does
+    # not list the Vietnam openings shown by I2S Vietnam social posts.
+    # Keep it monitored, but never convert its global text into a
+    # Vietnam job without explicit location evidence.
     {
         "name": "Ideas2Silicon Careers",
         "company": "Ideas2Silicon",
         "type": "catalog_jobs",
         "url": "https://www.ideas2silicon.com/career.html",
         "country_filter": "Vietnam",
-        "default_location": "Vietnam",
-        "assume_vietnam": True,
+        "default_location": "",
+        "assume_vietnam": False,
         "enabled": True,
         "priority": 1,
     },
