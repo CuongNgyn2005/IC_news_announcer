@@ -5,9 +5,42 @@ Telegram bot for semiconductor technology news and Vietnam IC-design jobs.
 The bot has two pipelines:
 
 ```text
-News sources -> IC/product filter -> source-text technical summary -> SQLite dedupe -> Telegram
-Job sources  -> IC-role prefilter -> job-detail enrichment -> Vietnam gate -> SQLite dedupe -> Telegram
+News sources -> IC/product filter -> source-text technical summary -> persistent dedupe -> Telegram
+Job sources  -> IC-role prefilter -> job-detail enrichment -> Vietnam gate -> persistent dedupe -> Telegram
 ```
+
+## Automatic operation
+
+IC Watch is designed to run from GitHub Actions, so a personal PC does not need
+to stay on. The scheduled workflow is `.github/workflows/ic-watch.yml` and runs
+at:
+
+- 09:00 Asia/Ho_Chi_Minh every day
+- 15:00 Asia/Ho_Chi_Minh every day
+
+Each run creates a temporary GitHub-hosted runner, installs the Python
+dependencies, runs the regression tests, collects news/jobs, sends genuinely
+new accepted items to Telegram, persists its dedupe database, and exits.
+
+The persistent database is stored only on the `bot-state` branch as
+`state/ic_watch.db`; it is not committed to `main`. On the first automated run,
+IC Watch enters baseline mode: currently visible accepted items are recorded but
+**not sent**. This prevents an old job/news backlog from flooding Telegram when
+a new source is introduced. Later scheduled runs announce only new items.
+
+### Required GitHub Actions secrets
+
+Before the workflow can send to Telegram, add these repository secrets in
+GitHub **Settings -> Secrets and variables -> Actions**:
+
+```text
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHANNEL_ID
+```
+
+Use the same values as the local `.env`; never commit them to the repository.
+After adding both secrets, the workflow can also be tested manually from
+**Actions -> IC Watch Scheduled Run -> Run workflow**.
 
 ## Job focus
 
@@ -67,13 +100,39 @@ PPA means Power, Performance and Area. Numeric PPA fields are emitted only when
 the available source text contains an actual metric. Missing facts are shown as
 `Not stated in the source text available to the bot.` instead of being guessed.
 
-## Companies monitored
+## Vietnam semiconductor companies monitored
 
-Priority companies include Marvell, Ampere Computing, SkyeChip, HCLTech,
-Truechip, Infineon Technologies, and Ideas2Silicon. General IC news from
-EE Times and IEEE Spectrum is also collected.
+The job-source set is company-first and now covers a broader mix of large
+international design/EDA companies and Vietnam-focused semiconductor teams:
 
-## Setup
+- Marvell
+- Ampere Computing
+- SkyeChip
+- HCLTech
+- Truechip
+- Infineon Technologies
+- Ideas2Silicon
+- Synopsys
+- Qorvo
+- Renesas Electronics
+- Cadence
+- FPT Semiconductor
+- Faraday Technology Vietnam
+- Viettel High Tech
+- Quy Nhon Semiconductor (QNSC)
+- NBIV
+- BOS Semiconductors Vietnam
+- CoAsia SEMI
+
+General IC news from EE Times and IEEE Spectrum is also collected. Not every
+company has a stable machine-readable careers/news feed; source-specific
+collectors are preferred, and one failing source does not stop the rest of the
+run.
+
+## Local setup and validation
+
+Local execution remains useful for development and debugging but is not required
+for the scheduled production bot.
 
 ```powershell
 python -m venv .venv
@@ -91,7 +150,7 @@ MAX_JOBS_TO_SEND=10
 POLL_INTERVAL_MINUTES=60
 ```
 
-Run one collection cycle:
+Run one local collection cycle:
 
 ```powershell
 python main.py
@@ -111,11 +170,14 @@ python -m unittest discover -s tests
 
 ## Dedupe behavior
 
-Successful Telegram sends are saved in `data/ic_watch.db`.
+Locally, successful Telegram sends are saved in `data/ic_watch.db`. Under
+GitHub Actions the same SQLite state is restored from and saved back to the
+`bot-state` branch.
 
 - News is deduplicated by article URL.
 - Jobs are deduplicated by a hash of source, company, title, location, and URL.
 - Failed Telegram sends are not recorded, so they can be retried on the next run.
+- The first automated run baselines existing accepted items without sending.
 
 ## Source behavior
 
@@ -123,28 +185,21 @@ Some career and newsroom sites are dynamic or protected. Each collector is
 isolated: one source failing logs `[JOB ERROR]`, `[HTML ERROR]` or
 `[COMPANY ERROR]` and does not stop the remaining sources.
 
-Marvell jobs use the public Workday career endpoint and its job-detail endpoint.
-Ampere uses the public careers JSON listing with a browser-like TLS client.
-HCLTech and Infineon use their career search pages with Vietnam queries.
-SkyeChip, Truechip and Ideas2Silicon use their public career/catalog pages.
+Marvell and Cadence use Workday collection; Ampere uses its public careers JSON
+listing with a browser-like TLS client. Renesas uses its public SmartRecruiters
+career page. FPT Semiconductor, Faraday Vietnam, Viettel High Tech, QNSC, NBIV,
+BOS Semiconductors and other smaller teams use their official public career or
+catalog pages where possible.
 
 A configured `country_filter = "Vietnam"` is a search request, not proof that a
 returned job is in Vietnam. The final filter requires observed Vietnam evidence
-unless a future source-specific collector can prove the location independently.
+unless the particular source itself is explicitly Vietnam-only.
 
 Company news is intentionally filtered more strictly than jobs so corporate
 earnings, acquisitions and hiring announcements do not appear as technology
 product news.
 
-## Continuous mode
+## Optional continuous local mode
 
-`python main.py` runs one collection cycle. To keep IC Watch running continuously:
-
-```powershell
-python service.py
-```
-
-The default polling interval is 60 minutes. Override it in `.env` with
-`POLL_INTERVAL_MINUTES`. The service enforces a minimum interval of 15 minutes
-to avoid hammering career/news websites. SQLite deduplication means repeated
-cycles do not repost the same accepted item.
+`service.py` remains available for local experiments, but it is not needed for
+the production schedule. GitHub Actions is the intended unattended runner.
