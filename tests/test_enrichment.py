@@ -34,8 +34,15 @@ class JobDetailExtractionTests(unittest.TestCase):
             "Ho Chi Minh City, Vietnam & Da Nang, Vietnam",
             "Physical design role available in Ho Chi Minh City and Da Nang.",
         )
-
         self.assertEqual(result["city"], "Ho Chi Minh City / Da Nang")
+
+    def test_direct_listing_city_beats_other_offices_in_page_body(self):
+        result = extract_job_requirements(
+            "Staff Engineer Physical Design",
+            "Ho Chi Minh City, Vietnam",
+            "Global careers footer also lists Hanoi and Da Nang offices.",
+        )
+        self.assertEqual(result["city"], "Ho Chi Minh City")
 
     def test_missing_requirements_are_explicit(self):
         result = extract_job_requirements(
