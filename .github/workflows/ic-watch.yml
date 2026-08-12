@@ -11,6 +11,13 @@ on:
     - cron: "7 15 * * *"
       timezone: "Asia/Ho_Chi_Minh"
   workflow_dispatch:
+  # Temporary one-shot production validation. This commit changes this exact
+  # workflow file, so it exercises the same job immediately. The trigger is
+  # removed again after validation; scheduled production remains unchanged.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ic-watch.yml"
 
 concurrency:
   group: ic-watch-scheduled
@@ -26,8 +33,6 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-      # Zero means unlimited for scheduled runs. The first persistent run is a
-      # baseline and sends nothing, so subsequent runs only announce new items.
       MAX_NEWS_TO_SEND: "0"
       MAX_JOBS_TO_SEND: "0"
 
