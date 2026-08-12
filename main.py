@@ -4,6 +4,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
+from collectors.job_details import enrich_job
 from collectors.jobs import fetch_jobs
 from collectors.news import fetch_news
 from database.db import (
@@ -15,13 +16,16 @@ from database.db import (
 )
 from filters.ic_filter import is_ic_related
 from filters.job_filter import classify_job
+from summarizers.news_summary import (
+    format_technical_summary,
+    summarize_article,
+)
 
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
-
 MAX_NEWS_TO_SEND = int(os.getenv("MAX_NEWS_TO_SEND", "5"))
 MAX_JOBS_TO_SEND = int(os.getenv("MAX_JOBS_TO_SEND", "10"))
 
@@ -29,12 +33,10 @@ MAX_JOBS_TO_SEND = int(os.getenv("MAX_JOBS_TO_SEND", "10"))
 def send_telegram_message(message):
     if not BOT_TOKEN or not CHANNEL_ID:
         raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID "
-            "must be set in .env"
+            "TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID must be set in .env"
         )
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
     response = requests.post(
         url,
         data={
@@ -48,17 +50,6 @@ def send_telegram_message(message):
     return response.json()
 
 
-def _tag(text):
-    cleaned = "".join(
-        char if char.isalnum() else "_"
-        for char in text
-    )
-    cleaned = "_".join(
-        part for part in cleaned.split("_") if part
-    )
-    return f"#{cleaned}" if cleaned else ""
-
-
 def _make_job_key(job):
     raw = "|".join(
         [
@@ -69,8 +60,37 @@ def _make_job_key(job):
             job.get("link", ""),
         ]
     ).lower()
-
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _display_location(job):
+    city = job.get("city", "").strip()
+    if city:
+        return f"{city}, Vietnam"
+
+    location = (job.get("location") or "").strip()
+    if location and location.lower() not in {"vietnam", "viet nam"}:
+        return location
+
+    return "Vietnam (city not stated by source)"
+
+
+def _requirements_text(job):
+    qualifications = job.get("qualification_requirements", [])
+    if qualifications:
+        qualification_text = "\n".join(
+            f"  • {item}" for item in qualifications[:4]
+        )
+    else:
+        qualification_text = "  • Not stated in the source text available to the bot."
+
+    return (
+        f"• Experience: {job.get('experience_requirement') or 'Not stated'}\n"
+        f"• English / IELTS / TOEIC: "
+        f"{job.get('english_requirement') or 'Not stated'}\n"
+        "• Key qualifications:\n"
+        f"{qualification_text}"
+    )
 
 
 def process_news():
@@ -91,10 +111,7 @@ def process_news():
                 f"{article['title']} | {keywords}"
             )
         else:
-            print(
-                f"[NEWS REJECT] {score:2d} | "
-                f"{article['title']}"
-            )
+            print(f"[NEWS REJECT] {score:2d} | {article['title']}")
 
     print(f"\nIC news: {len(accepted)}/{len(articles)}")
     sent_count = 0
@@ -107,26 +124,26 @@ def process_news():
             print(f"[NEWS DUPLICATE] {article['title']}")
             continue
 
-        tags = " ".join(
-            tag
-            for tag in (
-                _tag(keyword)
-                for keyword in article["keywords"][:5]
-            )
-            if tag
-        )
+        print(f"[NEWS SUMMARIZE] {article['title']}")
+        technical_summary = summarize_article(article)
+        summary_text = format_technical_summary(technical_summary)
 
         company = article.get("company")
         company_line = f"🏢 Company: {company}\n" if company else ""
+        published_line = (
+            f"🗓 Published: {article['published']}\n"
+            if article.get("published")
+            else ""
+        )
 
         message = (
             "📰 IC TECHNOLOGY NEWS\n\n"
             f"{article['title']}\n\n"
             f"{company_line}"
             f"🗞 Source: {article['source']}\n"
-            f"🎯 IC score: {article['ic_score']}\n"
-            f"🏷 {tags}\n\n"
-            f"🔗 {article['link']}"
+            f"{published_line}\n"
+            f"{summary_text}\n\n"
+            f"🔗 Read full article: {article['link']}"
         )
 
         print(f"[NEWS SEND] {article['title']}")
@@ -136,10 +153,7 @@ def process_news():
             save_article(article)
             sent_count += 1
         except (requests.RequestException, RuntimeError) as error:
-            print(
-                f"[TELEGRAM ERROR] "
-                f"{article['title']} | {error}"
-            )
+            print(f"[TELEGRAM ERROR] {article['title']} | {error}")
 
     print(f"News finished. Sent {sent_count} new articles.")
 
@@ -150,7 +164,25 @@ def process_jobs():
 
     accepted = []
 
-    for job in jobs:
+    for raw_job in jobs:
+        # First reject clearly unrelated roles without making another HTTP
+        # request. A lower prefilter threshold keeps borderline IC titles for
+        # detail inspection.
+        pre_related, _, pre_score, _ = classify_job(
+            raw_job,
+            threshold=5,
+            require_vietnam=False,
+        )
+
+        if not pre_related:
+            print(
+                f"[JOB REJECT] {pre_score:2d} | "
+                f"{raw_job.get('company', '')} | "
+                f"{raw_job.get('title', '')}"
+            )
+            continue
+
+        job = enrich_job(raw_job)
         related, role, score, terms = classify_job(job)
 
         if related:
@@ -163,14 +195,14 @@ def process_jobs():
                 f"[JOB ACCEPT] {score:2d} | "
                 f"{job.get('company', '')} | "
                 f"{job['title']} | "
-                f"{job.get('location', '')} | "
-                f"{role}"
+                f"{_display_location(job)} | "
+                f"{job.get('seniority', 'Not stated')} | {role}"
             )
         else:
             print(
                 f"[JOB REJECT] {score:2d} | "
                 f"{job.get('company', '')} | "
-                f"{job['title']} | "
+                f"{job.get('title', '')} | "
                 f"{job.get('location', '')}"
             )
 
@@ -182,11 +214,7 @@ def process_jobs():
         )
     )
 
-    print(
-        f"\nTarget Vietnam IC jobs: "
-        f"{len(accepted)}/{len(jobs)}"
-    )
-
+    print(f"\nTarget Vietnam IC jobs: {len(accepted)}/{len(jobs)}")
     sent_count = 0
 
     for job in accepted:
@@ -194,13 +222,9 @@ def process_jobs():
             break
 
         if job_exists(job["job_key"]):
-            print(
-                f"[JOB DUPLICATE] "
-                f"{job['company']} | {job['title']}"
-            )
+            print(f"[JOB DUPLICATE] {job['company']} | {job['title']}")
             continue
 
-        matched = ", ".join(job.get("matched_terms", [])[:5])
         posted_line = (
             f"🗓 Posted: {job['posted']}\n"
             if job.get("posted")
@@ -208,14 +232,16 @@ def process_jobs():
         )
 
         message = (
-            "💼 VIETNAM IC JOB\n\n"
-            f"{job['title']}\n\n"
+            "🚨 JOBS ALERT\n\n"
+            f"💼 {job['title']}\n"
             f"🏢 Company: {job.get('company', '')}\n"
-            f"📍 Location: {job.get('location') or 'Vietnam'}\n"
-            f"🎯 Focus: {job.get('role', '')}\n"
-            f"{posted_line}"
-            f"🔎 Matched: {matched}\n\n"
-            f"🔗 {job.get('link', '')}"
+            f"📍 Location: {_display_location(job)}\n"
+            f"🏷 Level: {job.get('seniority') or 'Not stated'}\n"
+            f"🎯 IC Track: {job.get('role', '')}\n"
+            f"{posted_line}\n"
+            "Requirements to qualify:\n"
+            f"{_requirements_text(job)}\n\n"
+            f"🔗 Apply / full description: {job.get('link', '')}"
         )
 
         print(f"[JOB SEND] {job['company']} | {job['title']}")
@@ -225,9 +251,7 @@ def process_jobs():
             save_job(job)
             sent_count += 1
         except (requests.RequestException, RuntimeError) as error:
-            print(
-                f"[TELEGRAM ERROR] {job['title']} | {error}"
-            )
+            print(f"[TELEGRAM ERROR] {job['title']} | {error}")
 
     print(f"Jobs finished. Sent {sent_count} new jobs.")
 
