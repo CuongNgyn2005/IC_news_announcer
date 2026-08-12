@@ -26,6 +26,15 @@ class JobDetailExtractionTests(unittest.TestCase):
         self.assertIn("TOEIC", result["english_requirement"])
         self.assertTrue(result["qualification_requirements"])
 
+    def test_preserves_multiple_vietnam_cities(self):
+        result = extract_job_requirements(
+            "Physical Design Engineer",
+            "Ho Chi Minh City, Vietnam & Da Nang, Vietnam",
+            "Physical design role available in Ho Chi Minh City and Da Nang.",
+        )
+
+        self.assertEqual(result["city"], "Ho Chi Minh City / Da Nang")
+
     def test_missing_requirements_are_explicit(self):
         result = extract_job_requirements(
             "RTL Engineer",
