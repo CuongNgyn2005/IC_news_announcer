@@ -63,6 +63,16 @@ class JobFilterTests(unittest.TestCase):
         self.assertTrue(related)
         self.assertEqual(role, "Physical Design")
 
+    def test_physical_verification_is_backend_not_functional_dv(self):
+        related, role, _, _ = classify_job({
+            "title": "Physical Verification Engineer (Chip Top)",
+            "company": "BOS Semiconductors",
+            "location": "Ho Chi Minh City, Vietnam",
+            "context": "DRC LVS physical verification signoff",
+        })
+        self.assertTrue(related)
+        self.assertEqual(role, "Physical Design")
+
     def test_non_vietnam_job_is_rejected_even_with_source_filter(self):
         related, _, _, _ = classify_job({
             "title": "SoC Verification Engineer",
@@ -70,6 +80,16 @@ class JobFilterTests(unittest.TestCase):
             "location": "Santa Clara, California",
             "country": "Vietnam",
             "context": "UVM SystemVerilog",
+            "assume_vietnam": False,
+        })
+        self.assertFalse(related)
+
+    def test_explicit_foreign_title_beats_vietnam_page_context(self):
+        related, _, _, _ = classify_job({
+            "title": "Staff Engineer Analog Layout Bucharest (Romania)",
+            "company": "Infineon Technologies",
+            "location": "Bucharest, Romania",
+            "context": "Global career page also lists Hanoi, Vietnam roles.",
             "assume_vietnam": False,
         })
         self.assertFalse(related)
