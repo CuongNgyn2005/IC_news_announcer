@@ -57,10 +57,6 @@ NEWS_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
-    # The direct HCLTech newsroom intermittently times out from plain
-    # requests. Use a narrow RSS query so the bot gets semiconductor
-    # announcements without crawling the full corporate newsroom.
     {
         "name": "HCLTech Semiconductor",
         "company": "HCLTech",
@@ -93,10 +89,24 @@ NEWS_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
+    {
+        "name": "FPT Semiconductor News",
+        "company": "FPT Semiconductor",
+        "category": "company_product",
+        "type": "rss",
+        "url": (
+            "https://news.google.com/rss/search?"
+            "q=site%3Afpt-semiconductor.com+%22FPT+Semiconductor%22+"
+            "%28chip+OR+semiconductor+OR+IC%29+when%3A90d"
+            "&hl=en-US&gl=US&ceid=US%3Aen"
+        ),
+        "enabled": True,
+        "priority": 1,
+    },
 
     # Ideas2Silicon currently exposes technology and careers pages but
-    # no stable official news feed. Keep this disabled instead of
-    # repeatedly polling an empty Google News query.
+    # no stable official news feed. Keep this disabled rather than poll
+    # a known-empty feed.
     {
         "name": "Ideas2Silicon News",
         "company": "Ideas2Silicon",
@@ -107,7 +117,7 @@ NEWS_SOURCES = [
         "priority": 1,
     },
 
-    # Additional industry sources kept ready for later expansion.
+    # Additional industry sources retained for later news expansion.
     {
         "name": "Synopsys",
         "company": "Synopsys",
@@ -147,6 +157,15 @@ NEWS_SOURCES = [
 ]
 
 
+# ============================================================================
+# VIETNAM IC / SEMICONDUCTOR JOB SOURCES
+#
+# Sources are deliberately company-first instead of relying on generic job
+# boards. The final filter still requires Vietnam evidence and a target IC role.
+# Static pages with old vacancies are safe on GitHub Actions because the first
+# persistent run baselines existing accepted items instead of announcing them.
+# ============================================================================
+
 JOB_SOURCES = [
     {
         "name": "Marvell Vietnam Careers",
@@ -170,19 +189,12 @@ JOB_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
-    # Ampere's TTC/TalentTech HTML board returns 403 to ordinary
-    # requests. Its public JSON listing feed is queried with a
-    # browser-like TLS client and filtered to observed Vietnam rows.
     {
         "name": "Ampere Computing Vietnam Careers",
         "company": "Ampere Computing",
         "type": "ttc_jobs",
         "url": "https://careers.amperecomputing.com/",
-        "json_url": (
-            "https://careers.amperecomputing.com/"
-            "search/jobs.json"
-        ),
+        "json_url": "https://careers.amperecomputing.com/search/jobs.json",
         "referer": "https://careers.amperecomputing.com/search/jobs",
         "country_filter": "Vietnam",
         "max_pages": 10,
@@ -190,10 +202,6 @@ JOB_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
-    # SkyeChip has Vietnam entities/offices, but its public careers
-    # catalog does not identify which listed roles are open in Vietnam.
-    # Do not label every global catalog role as Vietnam automatically.
     {
         "name": "SkyeChip Careers",
         "company": "SkyeChip",
@@ -205,7 +213,6 @@ JOB_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
     {
         "name": "HCLTech Vietnam Careers",
         "company": "HCLTech",
@@ -229,10 +236,6 @@ JOB_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
-    # Truechip's catalog is global and currently does not expose a
-    # Vietnam location on each role, so only explicitly Vietnam-tagged
-    # entries are allowed through the location gate.
     {
         "name": "Truechip Careers",
         "company": "Truechip",
@@ -244,7 +247,6 @@ JOB_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
     {
         "name": "Infineon Vietnam Careers",
         "company": "Infineon Technologies",
@@ -268,11 +270,6 @@ JOB_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
-    # The official I2S careers page is a global contact page and does
-    # not list the Vietnam openings shown by I2S Vietnam social posts.
-    # Keep it monitored, but never convert its global text into a
-    # Vietnam job without explicit location evidence.
     {
         "name": "Ideas2Silicon Careers",
         "company": "Ideas2Silicon",
@@ -283,5 +280,148 @@ JOB_SOURCES = [
         "assume_vietnam": False,
         "enabled": True,
         "priority": 1,
+    },
+
+    # Major foreign IC/EDA design centres with current Vietnam openings.
+    {
+        "name": "Synopsys Vietnam Careers",
+        "company": "Synopsys",
+        "type": "html_jobs",
+        "url": "https://careers.synopsys.com/jobs-in-vietnam",
+        "country_filter": "Vietnam",
+        "default_location": "",
+        "assume_vietnam": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "Qorvo Engineering Careers",
+        "company": "Qorvo",
+        "type": "html_jobs",
+        "url": "https://careers.qorvo.com/go/Engineering-Careers/8587200/",
+        "country_filter": "Vietnam",
+        "default_location": "",
+        "assume_vietnam": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "Renesas Vietnam Careers",
+        "company": "Renesas Electronics",
+        "type": "smartrecruiters_jobs",
+        "url": (
+            "https://careers.smartrecruiters.com/"
+            "RenesasElectronics?search=Vietnam"
+        ),
+        "country_filter": "Vietnam",
+        "default_location": "",
+        "assume_vietnam": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "Cadence Careers",
+        "company": "Cadence",
+        "type": "workday",
+        "url": "https://cadence.wd1.myworkdayjobs.com/External_Careers",
+        "workday_tenant": "cadence",
+        "workday_site": "External_Careers",
+        "country_filter": "Vietnam",
+        "search_terms": [
+            "physical design",
+            "design verification",
+            "rtl",
+            "layout",
+            "analog",
+            "dft",
+            "application engineer",
+        ],
+        "enabled": True,
+        "priority": 2,
+    },
+
+    # Vietnam-headquartered / Vietnam-specific IC design teams.
+    {
+        "name": "FPT Semiconductor Careers",
+        "company": "FPT Semiconductor",
+        "type": "catalog_jobs",
+        "url": "https://fpt-semiconductor.com/careers/",
+        "country_filter": "Vietnam",
+        "default_location": "",
+        "assume_vietnam": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "Faraday Technology Vietnam Careers",
+        "company": "Faraday Technology",
+        "type": "catalog_jobs",
+        "url": "https://www.faraday-tech.com/en/content/Careers/RecruitingVietnam",
+        "country_filter": "Vietnam",
+        "default_location": "Ho Chi Minh City, Vietnam",
+        "assume_vietnam": True,
+        "detail_fetch": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "Viettel High Tech SoC Careers",
+        "company": "Viettel High Tech",
+        "type": "catalog_jobs",
+        "url": "https://viettelhightech.com/en/tuyen-dung/soc-design-engineer",
+        "country_filter": "Vietnam",
+        "default_location": "",
+        "assume_vietnam": False,
+        "detail_fetch": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "Quy Nhon Semiconductor Careers",
+        "company": "Quy Nhon Semiconductor",
+        "type": "catalog_jobs",
+        "url": "https://qnsc.vn/",
+        "country_filter": "Vietnam",
+        "default_location": "Quy Nhon, Vietnam",
+        "assume_vietnam": True,
+        "detail_fetch": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "NBIV Semiconductor Careers",
+        "company": "NBIV",
+        "type": "catalog_jobs",
+        "url": "https://nbiv.com.vn/development/",
+        "country_filter": "Vietnam",
+        "default_location": "Ho Chi Minh City, Vietnam",
+        "assume_vietnam": True,
+        "detail_fetch": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "BOS Semiconductors Vietnam Careers",
+        "company": "BOS Semiconductors",
+        "type": "catalog_jobs",
+        "url": "https://www.bos-semi.com/careers-vietnam",
+        "country_filter": "Vietnam",
+        "default_location": "Ho Chi Minh City, Vietnam",
+        "assume_vietnam": True,
+        "detail_fetch": False,
+        "enabled": True,
+        "priority": 1,
+    },
+    {
+        "name": "CoAsia SEMI Employment",
+        "company": "CoAsia SEMI",
+        "type": "html_jobs",
+        "url": "https://www.coasiasemi.com/bbs/board.php?bo_table=employment",
+        "job_url_hints": ["bo_table=employment&wr_id="],
+        "country_filter": "Vietnam",
+        "default_location": "",
+        "assume_vietnam": False,
+        "enabled": True,
+        "priority": 2,
     },
 ]
