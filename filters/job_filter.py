@@ -144,6 +144,10 @@ VIETNAM_TERMS = {
     "ha noi",
     "da nang",
     "danang",
+    "bac ninh",
+    "hai phong",
+    "binh duong",
+    "dong nai",
 }
 
 
@@ -160,9 +164,6 @@ def _contains(text, term):
 
 
 def is_vietnam_job(job):
-    # Only observed job text counts as Vietnam evidence. country_filter
-    # in sources.py is a requested search scope and must not turn a
-    # non-Vietnam result into a Vietnam result by itself.
     location_text = _normalize(
         " ".join(
             [
@@ -178,7 +179,13 @@ def is_vietnam_job(job):
     return bool(job.get("assume_vietnam", False))
 
 
-def classify_job(job, threshold=7):
+def classify_job(job, threshold=7, require_vietnam=True):
+    """Classify IC roles; optionally postpone the Vietnam gate.
+
+    main.py first runs this with require_vietnam=False so only potentially
+    relevant IC roles incur a job-detail request. After detail enrichment it
+    runs the normal Vietnam-gated classification again.
+    """
     title = _normalize(job.get("title", ""))
     description = _normalize(job.get("summary", ""))
     context = _normalize(job.get("context", ""))
@@ -238,7 +245,7 @@ def classify_job(job, threshold=7):
     if best_score < threshold:
         return False, None, best_score, best_terms
 
-    if not is_vietnam_job(job):
+    if require_vietnam and not is_vietnam_job(job):
         return False, best_role, best_score, best_terms
 
     return True, best_role, best_score, best_terms
