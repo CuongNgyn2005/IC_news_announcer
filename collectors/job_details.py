@@ -34,7 +34,14 @@ CITY_RULES = (
 )
 
 
-SENIORITY_RULES = (
+# Seniority must come from the actual job title. Broad job-detail pages often
+# mention graduates, junior engineers, managers or leads in unrelated text;
+# using the whole page caused Senior/Staff roles to be mislabeled as Junior.
+TITLE_SENIORITY_RULES = (
+    (r"\bstaff\s+to\s+senior\s+staff\b", "Staff / Senior Staff"),
+    (r"\bsenior\s*/\s*staff\b|\bsr\.?\s*/\s*staff\b", "Senior / Staff"),
+    (r"\bsenior\s+staff\b|\bsr\.?\s+staff\b", "Senior Staff"),
+    (r"\bsenior\s+principal\b|\bsr\.?\s+principal\b", "Senior Principal"),
     (r"\bintern(?:ship)?\b|\btrainee\b", "Intern / Trainee"),
     (r"\bnew grad(?:uate)?\b|\bgraduate\b|\bfresher\b|\bentry[- ]level\b", "Graduate / Entry Level"),
     (r"\bjunior\b|\bjr\.?\b", "Junior"),
@@ -44,6 +51,7 @@ SENIORITY_RULES = (
     (r"\blead\b", "Lead"),
     (r"\bsenior\b|\bsr\.?\b", "Senior"),
     (r"\bmid[- ]level\b|\bintermediate\b", "Mid Level"),
+    (r"\bexperienced\b", "Experienced"),
 )
 
 
@@ -203,9 +211,10 @@ def extract_city(text):
 
 
 def extract_seniority(title, text=""):
-    haystack = _clean(f"{title} {text}")
-    for pattern, level in SENIORITY_RULES:
-        if re.search(pattern, haystack, flags=re.IGNORECASE):
+    del text  # Deliberately avoid unrelated seniority words in page body.
+    normalized_title = _clean(title)
+    for pattern, level in TITLE_SENIORITY_RULES:
+        if re.search(pattern, normalized_title, flags=re.IGNORECASE):
             return level
     return "Not stated"
 
