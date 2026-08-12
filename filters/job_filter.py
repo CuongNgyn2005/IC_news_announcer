@@ -137,6 +137,8 @@ TRUSTED_SEMICONDUCTOR_EMPLOYERS = {
     "ideas2silicon",
     "synopsys",
     "qorvo",
+    "intel",
+    "gsme",
     "fpt semiconductor",
     "faraday technology",
     "renesas electronics",
