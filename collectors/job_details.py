@@ -24,6 +24,7 @@ CITY_RULES = (
     (r"\bho chi minh(?: city)?\b|\bhcmc\b|\bthu duc\b", "Ho Chi Minh City"),
     (r"\bhanoi\b|\bha noi\b", "Hanoi"),
     (r"\bda nang\b|\bdanang\b", "Da Nang"),
+    (r"\bquy nhon\b", "Quy Nhon"),
     (r"\bbac ninh\b", "Bac Ninh"),
     (r"\bhai phong\b", "Hai Phong"),
     (r"\bbinh duong\b", "Binh Duong"),
@@ -161,6 +162,9 @@ def _extract_page_text(response):
 
 
 def _fetch_detail_text(job):
+    if job.get("skip_detail_fetch"):
+        return ""
+
     urls = []
 
     if job.get("detail_api_url"):
