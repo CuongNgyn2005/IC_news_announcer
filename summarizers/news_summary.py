@@ -161,7 +161,8 @@ FIELD_RULES = {
 
 
 TECH_METRIC_PATTERN = re.compile(
-    r"(?:\b\d+(?:\.\d+)?\s*(?:nm|ghz|tbps|gbps|tops|tflops|watts?|w|%)\b|"
+    r"(?:\b\d+(?:\.\d+)?\s*(?:nm|ghz|tbps|gbps|tops|tflops|watts?|w)\b|"
+    r"\b\d+(?:\.\d+)?\s*%|"
     r"\$\s*\d+(?:\.\d+)?\s*(?:billion|million|bn|m)?|"
     r"\b\d+(?:\.\d+)?\s*(?:x|times)\b)",
     flags=re.IGNORECASE,
@@ -335,7 +336,7 @@ def _best_sentence(sentences, terms, require_metric=False, extra_check=None):
         return NOT_STATED
 
     candidates.sort(key=lambda item: (-item[0], len(item[1])))
-    return candidates[0][1][:280]
+    return candidates[0][1][:220]
 
 
 def summarize_text(text):
