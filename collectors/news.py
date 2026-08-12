@@ -6,6 +6,16 @@ from collectors.company_news import fetch_company_news
 from collectors.truechip_news import fetch_truechip_news
 
 
+def _rss_content(entry):
+    values = []
+    for item in entry.get("content", []) or []:
+        if isinstance(item, dict):
+            value = item.get("value", "")
+            if value:
+                values.append(value)
+    return " ".join(values)
+
+
 def fetch_rss_news(source):
     print(f"[RSS FETCH] {source['name']}")
 
@@ -39,6 +49,7 @@ def fetch_rss_news(source):
                 "summary",
                 entry.get("description", ""),
             ),
+            "content": _rss_content(entry),
         })
 
     return articles
@@ -58,21 +69,14 @@ def fetch_news():
 
         if source["type"] == "rss":
             source_articles = fetch_rss_news(source)
-
         elif source["type"] == "company":
             source_articles = fetch_company_news(source)
-
         elif source["type"] == "truechip":
             source_articles = fetch_truechip_news(source)
-
         elif source["type"] == "html":
             source_articles = fetch_html_news(source)
-
         else:
-            print(
-                f"[UNKNOWN SOURCE TYPE] "
-                f"{source['type']}"
-            )
+            print(f"[UNKNOWN SOURCE TYPE] {source['type']}")
             continue
 
         articles.extend(source_articles)
