@@ -94,6 +94,16 @@ class JobFilterTests(unittest.TestCase):
         })
         self.assertFalse(related)
 
+    def test_foreign_title_beats_polluted_derived_vietnam_location(self):
+        related, _, _, _ = classify_job({
+            "title": "Staff Engineer Analog Layout (f/m/div) Bucharest (Romania)",
+            "company": "Infineon Technologies",
+            "location": "Hanoi, Vietnam",
+            "context": "Global career page also lists Hanoi, Vietnam roles.",
+            "assume_vietnam": False,
+        })
+        self.assertFalse(related)
+
     def test_title_role_beats_unrelated_page_context(self):
         related, role, _, _ = classify_job({
             "title": "Custom Analog Design",
