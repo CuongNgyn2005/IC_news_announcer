@@ -9,6 +9,7 @@ TARGET_ROLE_RULES = {
         "ip verification": 10,
         "functional verification": 9,
         "pre-silicon verification": 10,
+        "rtl verification": 9,
         "verification & validation": 7,
         "verification and validation": 7,
         "uvm": 6,
@@ -21,6 +22,7 @@ TARGET_ROLE_RULES = {
         "logic design": 10,
         "logic engineer": 9,
         "digital design": 8,
+        "soc design": 8,
         "front-end design": 8,
         "frontend design": 8,
         "microarchitecture": 8,
@@ -30,6 +32,8 @@ TARGET_ROLE_RULES = {
     },
     "Physical Design": {
         "physical design": 10,
+        "physical implementation": 9,
+        "backend implementation": 9,
         "design implementation": 9,
         "place and route": 9,
         "place-and-route": 9,
@@ -131,6 +135,18 @@ TRUSTED_SEMICONDUCTOR_EMPLOYERS = {
     "truechip",
     "skyechip",
     "ideas2silicon",
+    "synopsys",
+    "qorvo",
+    "fpt semiconductor",
+    "faraday technology",
+    "renesas electronics",
+    "viettel high tech",
+    "quy nhon semiconductor",
+    "qnsc",
+    "nbiv",
+    "bos semiconductors",
+    "coasia semi",
+    "cadence",
 }
 
 
@@ -144,10 +160,14 @@ VIETNAM_TERMS = {
     "ha noi",
     "da nang",
     "danang",
+    "quy nhon",
+    "gia lai",
     "bac ninh",
     "hai phong",
     "binh duong",
     "dong nai",
+    "can tho",
+    "da lat",
 }
 
 
@@ -225,6 +245,7 @@ def classify_job(job, threshold=7, require_vietnam=True):
             for term in (
                 "soc verification",
                 "ip verification",
+                "rtl verification",
                 "uvm",
                 "systemverilog",
             )
