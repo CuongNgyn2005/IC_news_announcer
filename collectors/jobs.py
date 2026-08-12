@@ -84,6 +84,47 @@ VIETNAM_LOCATION_PATTERN = re.compile(
 )
 
 
+NON_TITLE_PREFIXES = (
+    "responsible ",
+    "responsibilities ",
+    "work ",
+    "develop ",
+    "support ",
+    "familiar ",
+    "knowledge ",
+    "assist ",
+    "coordinate ",
+    "participate ",
+    "strong ",
+    "implement ",
+    "led ",
+    "end-to-end ",
+    "collaborate ",
+    "at least ",
+    "understanding ",
+    "definition ",
+    "perform ",
+    "requirements ",
+)
+
+
+TITLE_NOUNS = (
+    "engineer",
+    "designer",
+    "architect",
+    "manager",
+    "lead",
+    "intern",
+    "trainee",
+    "design",
+    "verification",
+    "layout",
+    "dft",
+    "sta",
+    "fpga",
+)
+
+
 def _clean(text):
     if text is None:
         return ""
@@ -191,6 +232,28 @@ def _looks_like_role(text):
     return any(term in lower for term in ROLE_DISCOVERY_TERMS)
 
 
+def _looks_like_job_title(text):
+    value = _clean(text)
+    lower = value.lower()
+
+    if not (4 <= len(value) <= 140):
+        return False
+    if any(lower.startswith(prefix) for prefix in NON_TITLE_PREFIXES):
+        return False
+    if not _looks_like_role(value):
+        return False
+
+    words = value.split()
+    has_title_noun = any(noun in lower for noun in TITLE_NOUNS)
+    if len(words) > 14 and not any(
+        noun in lower
+        for noun in ("engineer", "designer", "architect", "manager", "lead")
+    ):
+        return False
+
+    return has_title_noun
+
+
 def _job_record(source, title, link, context, location="", posted=""):
     return {
         "source": source["name"],
@@ -223,12 +286,28 @@ def _is_job_link(source, url):
     return any(domain.lower() in host for domain in allowed_domains)
 
 
+def _title_from_job_anchor(anchor):
+    text = _clean(anchor.get_text(" ", strip=True))
+    parent = anchor.find_parent(["li", "article", "div", "section", "tr"])
+
+    if _looks_like_job_title(text):
+        return text, parent
+
+    if parent:
+        heading = parent.find(["h1", "h2", "h3", "h4", "h5", "h6"])
+        heading_text = _clean(heading.get_text(" ", strip=True)) if heading else ""
+        if _looks_like_job_title(heading_text):
+            return heading_text, parent
+
+    return text, parent
+
+
 def _parse_html_job_page(html, source, page_url):
     soup = BeautifulSoup(html, "html.parser")
     jobs = []
 
     for anchor in soup.find_all("a", href=True):
-        title = _clean(anchor.get_text(" ", strip=True))
+        title, parent = _title_from_job_anchor(anchor)
         href = _clean(anchor.get("href", ""))
 
         if not title or not href:
@@ -241,31 +320,48 @@ def _parse_html_job_page(html, source, page_url):
             continue
         if url.rstrip("/") == page_url.rstrip("/"):
             continue
-        if (
-            "/search/" in lower_url
-            or lower_url.rstrip("/").endswith("/jobs")
-        ):
+        if "/search/" in lower_url or lower_url.rstrip("/").endswith("/jobs"):
+            continue
+        if not _looks_like_job_title(title):
             continue
 
-        parent = anchor.find_parent(
-            ["li", "article", "div", "section", "tr"]
-        )
         context = _clean(
             parent.get_text(" ", strip=True)
             if parent
             else title
         )
 
-        jobs.append(
-            _job_record(
-                source,
-                title,
-                url,
-                context,
-            )
-        )
+        jobs.append(_job_record(source, title, url, context))
 
     return _dedupe(jobs)
+
+
+def _parse_markdown_job_links(text, source, base_url, default_location=""):
+    jobs = []
+    pattern = re.compile(r"\[([^\]\n]{4,160})\]\(([^)\s]+)\)")
+
+    for match in pattern.finditer(text or ""):
+        title = _clean(match.group(1))
+        href = _clean(match.group(2))
+        url = urljoin(base_url, href)
+
+        if not _is_job_link(source, url) or not _looks_like_job_title(title):
+            continue
+
+        start = max(0, match.start() - 220)
+        end = min(len(text), match.end() + 320)
+        context = _clean(text[start:end])
+        location = _extract_location(context, default_location)
+        jobs.append(_job_record(source, title, url, context, location=location))
+
+    return _dedupe(jobs)
+
+
+def _proxy_markdown(url):
+    proxy_url = "https://r.jina.ai/" + url
+    response = requests.get(proxy_url, headers=HEADERS, timeout=30)
+    response.raise_for_status()
+    return response.text
 
 
 def fetch_html_jobs(source):
@@ -280,13 +376,30 @@ def fetch_query_html_jobs(source):
         params = {source.get("query_param", "q"): term}
         location_param = source.get("location_param")
         if location_param:
-            params[location_param] = source.get(
-                "country_filter",
-                "Vietnam",
-            )
+            params[location_param] = source.get("country_filter", "Vietnam")
 
         html, page_url = _request_html(source["url"], params=params)
         jobs.extend(_parse_html_job_page(html, source, page_url))
+
+    jobs = _dedupe(jobs)
+    if jobs:
+        return jobs
+
+    # Some modern career portals return an empty JS shell to requests. Jina
+    # Reader is used only as a public-page rendering fallback; links still
+    # point to the employer's official career site and detail validation is
+    # performed against the official posting before announcement.
+    for term in source.get("search_terms", WORKDAY_SEARCH_TERMS):
+        params = {source.get("query_param", "q"): term}
+        location_param = source.get("location_param")
+        if location_param:
+            params[location_param] = source.get("country_filter", "Vietnam")
+        prepared = requests.Request("GET", source["url"], params=params).prepare().url
+        try:
+            markdown = _proxy_markdown(prepared)
+            jobs.extend(_parse_markdown_job_links(markdown, source, source["url"]))
+        except requests.RequestException:
+            continue
 
     return _dedupe(jobs)
 
@@ -294,13 +407,13 @@ def fetch_query_html_jobs(source):
 def _best_role_cell(cells):
     for cell in cells:
         text = _clean(cell.get_text(" ", strip=True))
-        if _looks_like_role(text):
+        if _looks_like_job_title(text):
             return text
     return ""
 
 
 def _parse_catalog_page(html, source, page_url):
-    """Parse static career catalogs, including tables and simple role lists."""
+    """Parse static career catalogs while rejecting requirement sentences."""
     soup = BeautifulSoup(html, "html.parser")
     jobs = []
 
@@ -313,59 +426,37 @@ def _parse_catalog_page(html, source, page_url):
             continue
         context = _clean(row.get_text(" ", strip=True))
         anchor = row.find("a", href=True)
-        link = (
-            urljoin(page_url, anchor.get("href", ""))
-            if anchor
-            else page_url
-        )
+        link = urljoin(page_url, anchor.get("href", "")) if anchor else page_url
         jobs.append(_job_record(source, title, link, context))
 
     for heading in soup.find_all(["h2", "h3", "h4", "h5", "h6"]):
         title = _clean(heading.get_text(" ", strip=True))
-        if len(title) < 6 or not _looks_like_role(title):
+        if not _looks_like_job_title(title):
             continue
 
-        container = heading.find_parent(
-            ["article", "section", "div", "li"]
-        )
-        context = _clean(
-            container.get_text(" ", strip=True)
-            if container
-            else title
-        )
+        container = heading.find_parent(["article", "section", "div", "li"])
+        context = _clean(container.get_text(" ", strip=True) if container else title)
         anchor = heading.find("a", href=True) or (
             container.find("a", href=True) if container else None
         )
-        link = (
-            urljoin(page_url, anchor.get("href", ""))
-            if anchor
-            else page_url
-        )
+        link = urljoin(page_url, anchor.get("href", "")) if anchor else page_url
         jobs.append(_job_record(source, title, link, context))
 
     for item in soup.find_all("li"):
         title = _clean(item.get_text(" ", strip=True))
-        if not (6 <= len(title) <= 180) or not _looks_like_role(title):
+        if not _looks_like_job_title(title):
             continue
         anchor = item.find("a", href=True)
-        link = (
-            urljoin(page_url, anchor.get("href", ""))
-            if anchor
-            else page_url
-        )
+        link = urljoin(page_url, anchor.get("href", "")) if anchor else page_url
         jobs.append(_job_record(source, title, link, title))
 
     for anchor in soup.find_all("a", href=True):
         title = _clean(anchor.get_text(" ", strip=True))
-        if not (6 <= len(title) <= 180) or not _looks_like_role(title):
+        if not _looks_like_job_title(title):
             continue
         link = urljoin(page_url, anchor.get("href", ""))
         parent = anchor.find_parent(["tr", "li", "article", "section", "div"])
-        context = _clean(
-            parent.get_text(" ", strip=True)
-            if parent
-            else title
-        )
+        context = _clean(parent.get_text(" ", strip=True) if parent else title)
         jobs.append(_job_record(source, title, link, context))
 
     for node in soup.find_all(string=re.compile(r"Job\s*ID", re.I)):
@@ -380,7 +471,7 @@ def _parse_catalog_page(html, source, page_url):
             flags=re.IGNORECASE,
         ).strip()
 
-        if len(title) < 6 or not _looks_like_role(title):
+        if not _looks_like_job_title(title):
             continue
 
         jobs.append(_job_record(source, title, page_url, text))
@@ -394,7 +485,6 @@ def fetch_catalog_jobs(source):
 
 
 def _parse_smartrecruiters_page(html, source, page_url):
-    """Parse the public SmartRecruiters career page while preserving city groups."""
     soup = BeautifulSoup(html, "html.parser")
     jobs = []
     current_location = ""
@@ -402,11 +492,7 @@ def _parse_smartrecruiters_page(html, source, page_url):
     for node in soup.find_all(["h3", "a"]):
         if node.name == "h3":
             heading = _clean(node.get_text(" ", strip=True))
-            current_location = (
-                heading
-                if VIETNAM_LOCATION_PATTERN.search(heading)
-                else ""
-            )
+            current_location = heading if VIETNAM_LOCATION_PATTERN.search(heading) else ""
             continue
 
         if not current_location:
@@ -428,6 +514,9 @@ def _parse_smartrecruiters_page(html, source, page_url):
             flags=re.IGNORECASE,
         ).strip()
 
+        if not _looks_like_job_title(title):
+            continue
+
         jobs.append(
             _job_record(
                 source,
@@ -448,11 +537,7 @@ def fetch_smartrecruiters_jobs(source):
 
 def fetch_ttc_jobs(source):
     """Fetch TalentTech/TTC Portals jobs through its public JSON listing feed."""
-    json_url = source.get(
-        "json_url",
-        urljoin(source["url"], "/search/jobs.json"),
-    )
-
+    json_url = source.get("json_url", urljoin(source["url"], "/search/jobs.json"))
     jobs = []
     page = 1
     max_pages = int(source.get("max_pages", 10))
@@ -472,18 +557,10 @@ def fetch_ttc_jobs(source):
             location = _clean(entry.get("location", ""))
             permalink = _clean(entry.get("permalink", ""))
 
-            if not title or not permalink:
+            if not title or not permalink or not VIETNAM_LOCATION_PATTERN.search(location):
                 continue
 
-            if not VIETNAM_LOCATION_PATTERN.search(location):
-                continue
-
-            link = (
-                permalink
-                if permalink.startswith("http")
-                else urljoin(source["url"], permalink)
-            )
-
+            link = permalink if permalink.startswith("http") else urljoin(source["url"], permalink)
             jobs.append({
                 "source": source["name"],
                 "source_url": source["url"],
@@ -492,20 +569,14 @@ def fetch_ttc_jobs(source):
                 "link": link,
                 "location": location,
                 "country": "",
-                "posted": _clean(
-                    entry.get("date_posted", entry.get("posted", ""))
-                ),
-                "summary": _clean(
-                    entry.get("description", entry.get("summary", ""))
-                ),
-                "context": " ".join(
-                    [
-                        title,
-                        location,
-                        _clean(entry.get("category", "")),
-                        _clean(entry.get("description", "")),
-                    ]
-                ),
+                "posted": _clean(entry.get("date_posted", entry.get("posted", ""))),
+                "summary": _clean(entry.get("description", entry.get("summary", ""))),
+                "context": " ".join([
+                    title,
+                    location,
+                    _clean(entry.get("category", "")),
+                    _clean(entry.get("description", "")),
+                ]),
                 "assume_vietnam": False,
                 "skip_detail_fetch": False,
             })
@@ -516,7 +587,6 @@ def fetch_ttc_jobs(source):
         current_page = payload.get("current_page", page)
         per_page = payload.get("per_page", len(entries))
         total_entries = payload.get("total_entries")
-
         try:
             seen = int(current_page) * int(per_page)
         except (TypeError, ValueError):
@@ -526,10 +596,37 @@ def fetch_ttc_jobs(source):
             break
         if len(entries) < int(per_page or len(entries)):
             break
-
         page += 1
 
     return _dedupe(jobs)
+
+
+def fetch_ampere_jobs(source):
+    """Fetch Ampere's official HCMC page, with rendered-text fallback."""
+    city_url = "https://careers.amperecomputing.com/search/jobs/in/ho-chi-minh-city"
+
+    try:
+        response = _browser_get(city_url, accept="text/html", referer=source["url"])
+        jobs = _parse_html_job_page(response.text, source, city_url)
+        for job in jobs:
+            if not job.get("location"):
+                job["location"] = "Ho Chi Minh City, Vietnam"
+        if jobs:
+            return _dedupe(jobs)
+    except Exception as error:
+        print(f"[AMPERE DIRECT WARNING] {error}")
+
+    try:
+        markdown = _proxy_markdown(city_url)
+        return _parse_markdown_job_links(
+            markdown,
+            source,
+            city_url,
+            default_location="Ho Chi Minh City, Vietnam",
+        )
+    except requests.RequestException as error:
+        print(f"[AMPERE FALLBACK WARNING] {error}")
+        return []
 
 
 def fetch_workday_jobs(source):
@@ -542,14 +639,10 @@ def fetch_workday_jobs(source):
 
     for search_term in source.get("search_terms", WORKDAY_SEARCH_TERMS):
         offset = 0
-
         while offset < 100:
             response = requests.post(
                 endpoint,
-                headers={
-                    **HEADERS,
-                    "Content-Type": "application/json",
-                },
+                headers={**HEADERS, "Content-Type": "application/json"},
                 json={
                     "appliedFacets": {},
                     "limit": 20,
@@ -559,20 +652,13 @@ def fetch_workday_jobs(source):
                 timeout=25,
             )
             response.raise_for_status()
-
             payload = response.json()
             postings = payload.get("jobPostings", [])
 
             for posting in postings:
                 title = _clean(posting.get("title", ""))
-                location = _clean(
-                    posting.get(
-                        "locationsText",
-                        posting.get("location", ""),
-                    )
-                )
+                location = _clean(posting.get("locationsText", posting.get("location", "")))
                 path = _clean(posting.get("externalPath", ""))
-
                 if not title or not path:
                     continue
 
@@ -586,7 +672,6 @@ def fetch_workday_jobs(source):
                     if path.startswith("/")
                     else ""
                 )
-
                 jobs.append({
                     "source": source["name"],
                     "source_url": source["url"],
@@ -598,20 +683,17 @@ def fetch_workday_jobs(source):
                     "country": "",
                     "posted": _clean(posting.get("postedOn", "")),
                     "summary": "",
-                    "context": " ".join(
-                        [
-                            title,
-                            location,
-                            _clean(posting.get("bulletFields", "")),
-                        ]
-                    ),
+                    "context": " ".join([
+                        title,
+                        location,
+                        _clean(posting.get("bulletFields", "")),
+                    ]),
                     "assume_vietnam": False,
                     "skip_detail_fetch": False,
                 })
 
             total = payload.get("total")
             offset += len(postings)
-
             if not postings:
                 break
             if isinstance(total, int) and offset >= total:
@@ -632,7 +714,9 @@ def fetch_jobs():
         print(f"\n[JOB FETCH] {source['name']} ({source['type']})")
 
         try:
-            if source["type"] == "workday":
+            if source.get("name") == "Ampere Computing Vietnam Careers":
+                source_jobs = fetch_ampere_jobs(source)
+            elif source["type"] == "workday":
                 source_jobs = fetch_workday_jobs(source)
             elif source["type"] == "ttc_jobs":
                 source_jobs = fetch_ttc_jobs(source)
@@ -648,19 +732,9 @@ def fetch_jobs():
                 print(f"[UNKNOWN JOB SOURCE TYPE] {source['type']}")
                 continue
 
-            print(
-                f"[JOB RESULT] {source['name']} | "
-                f"{len(source_jobs)} candidates"
-            )
+            print(f"[JOB RESULT] {source['name']} | {len(source_jobs)} candidates")
             jobs.extend(source_jobs)
 
-        except (
-            requests.RequestException,
-            ValueError,
-            TypeError,
-            KeyError,
-        ) as error:
-            print(f"[JOB ERROR] {source['name']} | {error}")
         except Exception as error:
             print(f"[JOB ERROR] {source['name']} | {error}")
 
