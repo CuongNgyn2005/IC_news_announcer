@@ -37,7 +37,8 @@ WORKDAY_SEARCH_TERMS = (
 
 
 VIETNAM_LOCATION_PATTERN = re.compile(
-    r"(ho chi minh(?: city)?|hcmc|hanoi|ha noi|da nang|danang|viet\s*nam|vietnam)",
+    r"(ho chi minh(?: city)?|hcmc|hanoi|ha noi|da nang|danang|"
+    r"bac ninh|hai phong|binh duong|dong nai|viet\s*nam|vietnam)",
     flags=re.IGNORECASE,
 )
 
@@ -128,6 +129,10 @@ def _extract_location(context, default=""):
             "ha noi": "Hanoi, Vietnam",
             "da nang": "Da Nang, Vietnam",
             "danang": "Da Nang, Vietnam",
+            "bac ninh": "Bac Ninh, Vietnam",
+            "hai phong": "Hai Phong, Vietnam",
+            "binh duong": "Binh Duong, Vietnam",
+            "dong nai": "Dong Nai, Vietnam",
             "viet nam": "Vietnam",
             "vietnam": "Vietnam",
         }
@@ -178,6 +183,7 @@ def _parse_html_job_page(html, source, page_url):
 
         jobs.append({
             "source": source["name"],
+            "source_url": source["url"],
             "company": source["company"],
             "title": title,
             "link": url,
@@ -240,6 +246,7 @@ def fetch_catalog_jobs(source):
 
         jobs.append({
             "source": source["name"],
+            "source_url": source["url"],
             "company": source["company"],
             "title": title,
             "link": source["url"],
@@ -268,6 +275,7 @@ def fetch_catalog_jobs(source):
 
         jobs.append({
             "source": source["name"],
+            "source_url": source["url"],
             "company": source["company"],
             "title": title,
             "link": source["url"],
@@ -325,6 +333,7 @@ def fetch_ttc_jobs(source):
 
             jobs.append({
                 "source": source["name"],
+                "source_url": source["url"],
                 "company": source["company"],
                 "title": title,
                 "link": link,
@@ -333,12 +342,15 @@ def fetch_ttc_jobs(source):
                 "posted": _clean(
                     entry.get("date_posted", entry.get("posted", ""))
                 ),
-                "summary": "",
+                "summary": _clean(
+                    entry.get("description", entry.get("summary", ""))
+                ),
                 "context": " ".join(
                     [
                         title,
                         location,
                         _clean(entry.get("category", "")),
+                        _clean(entry.get("description", "")),
                     ]
                 ),
                 "assume_vietnam": False,
@@ -415,12 +427,19 @@ def fetch_workday_jobs(source):
                     if path.startswith("/")
                     else urljoin(source["url"], path)
                 )
+                detail_api_url = (
+                    f"https://{host}/wday/cxs/{tenant}/{site}{path}"
+                    if path.startswith("/")
+                    else ""
+                )
 
                 jobs.append({
                     "source": source["name"],
+                    "source_url": source["url"],
                     "company": source["company"],
                     "title": title,
                     "link": link,
+                    "detail_api_url": detail_api_url,
                     "location": location,
                     "country": "",
                     "posted": _clean(posting.get("postedOn", "")),
