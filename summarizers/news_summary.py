@@ -339,18 +339,34 @@ def _best_sentence(sentences, terms, require_metric=False, extra_check=None):
     return candidates[0][1][:220]
 
 
+def _best_process_sentence(sentences):
+    """Prefer an explicit process-node sentence over generic fab wording.
+
+    Financial statements often say things such as "$10 billion fabrication
+    site". Those contain both a metric and the word "fabrication", but they do
+    not describe the process node. An explicit nm node is therefore selected
+    first whenever one is present.
+    """
+    process_terms = FIELD_RULES["process_node"]
+    node_candidates = [
+        sentence for sentence in sentences if NODE_PATTERN.search(sentence)
+    ]
+
+    if node_candidates:
+        node_candidates.sort(
+            key=lambda sentence: (
+                -_score_sentence(sentence, process_terms),
+                len(sentence),
+            )
+        )
+        return node_candidates[0][:220]
+
+    return _best_sentence(sentences, process_terms)
+
+
 def summarize_text(text):
     sentences = _sentences(text)
-
-    process_terms = FIELD_RULES["process_node"]
-    process = _best_sentence(
-        sentences,
-        process_terms,
-        extra_check=lambda sentence: (
-            NODE_PATTERN.search(sentence) is not None
-            or any(term in sentence.lower() for term in process_terms)
-        ),
-    )
+    process = _best_process_sentence(sentences)
 
     financial = _best_sentence(
         sentences,
