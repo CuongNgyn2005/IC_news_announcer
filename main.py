@@ -5,7 +5,7 @@ import requests
 from dotenv import load_dotenv
 
 from collectors.job_details import enrich_job
-from collectors.jobs import fetch_jobs
+from collectors.jobs_runtime import fetch_jobs
 from collectors.news import fetch_news
 from database.db import (
     article_exists,
