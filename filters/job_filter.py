@@ -91,85 +91,42 @@ TARGET_ROLE_RULES = {
 
 
 SEMICONDUCTOR_ANCHORS = {
-    "asic",
-    "soc",
-    "silicon",
-    "semiconductor",
-    "rtl",
-    "verilog",
-    "systemverilog",
-    "uvm",
-    "vlsi",
-    "chip",
-    "ic design",
-    "integrated circuit",
-    "fpga",
-    "eda",
-    "cadence",
-    "synopsys",
-    "place and route",
-    "physical design",
-    "dft",
-    "mbist",
-    "atpg",
+    "asic", "soc", "silicon", "semiconductor", "rtl", "verilog",
+    "systemverilog", "uvm", "vlsi", "chip", "ic design",
+    "integrated circuit", "fpga", "eda", "cadence", "synopsys",
+    "place and route", "physical design", "dft", "mbist", "atpg",
 }
 
-
 EXCLUDE_TERMS = {
-    "solidworks",
-    "creo",
-    "mechanical design",
-    "industrial design",
-    "product designer",
-    "graphic design",
-    "ui designer",
-    "ux designer",
+    "solidworks", "creo", "mechanical design", "industrial design",
+    "product designer", "graphic design", "ui designer", "ux designer",
     "web designer",
 }
 
-
 TRUSTED_SEMICONDUCTOR_EMPLOYERS = {
-    "marvell",
-    "ampere computing",
-    "infineon technologies",
-    "truechip",
-    "skyechip",
-    "ideas2silicon",
-    "synopsys",
-    "qorvo",
-    "intel",
-    "gsme",
-    "fpt semiconductor",
-    "faraday technology",
-    "renesas electronics",
-    "viettel high tech",
-    "quy nhon semiconductor",
-    "qnsc",
-    "nbiv",
-    "bos semiconductors",
-    "coasia semi",
-    "cadence",
+    "marvell", "ampere computing", "infineon technologies", "truechip",
+    "skyechip", "ideas2silicon", "synopsys", "qorvo", "intel", "gsme",
+    "fpt semiconductor", "faraday technology", "renesas electronics",
+    "viettel high tech", "quy nhon semiconductor", "qnsc", "nbiv",
+    "bos semiconductors", "coasia semi", "cadence",
 }
 
-
 VIETNAM_TERMS = {
-    "vietnam",
-    "viet nam",
-    "ho chi minh",
-    "hcmc",
-    "hcm city",
-    "hanoi",
-    "ha noi",
-    "da nang",
-    "danang",
-    "quy nhon",
-    "gia lai",
-    "bac ninh",
-    "hai phong",
-    "binh duong",
-    "dong nai",
-    "can tho",
-    "da lat",
+    "vietnam", "viet nam", "ho chi minh", "hcmc", "hcm city", "hanoi",
+    "ha noi", "da nang", "danang", "quy nhon", "gia lai", "bac ninh",
+    "hai phong", "binh duong", "dong nai", "can tho", "da lat",
+}
+
+# Used only against the title/listing-location fields, never the full page.
+# This protects against global career pages where a Romania/Singapore job card
+# is followed by another Vietnam card and both cities leak into one container.
+EXPLICIT_FOREIGN_TERMS = {
+    "romania", "bucharest", "singapore", "malaysia", "penang", "india",
+    "bangalore", "bengaluru", "hyderabad", "pune", "united states",
+    "santa clara", "san diego", "austin", "california", "canada",
+    "israel", "haifa", "japan", "korea", "taiwan", "hsinchu", "china",
+    "shanghai", "beijing", "poland", "germany", "austria", "france",
+    "italy", "united kingdom", "uk", "sweden", "oman", "muscat",
 }
 
 
@@ -180,22 +137,23 @@ def _normalize(text):
 def _contains(text, term):
     if term.startswith(" ") or term.endswith(" "):
         return term in f" {text} "
-
     pattern = r"(?<!\w)" + re.escape(term) + r"(?!\w)"
     return re.search(pattern, text, flags=re.IGNORECASE) is not None
 
 
 def is_vietnam_job(job):
-    location_text = _normalize(
-        " ".join(
-            [
-                job.get("location", ""),
-                job.get("context", ""),
-            ]
-        )
+    direct_text = _normalize(
+        " ".join([job.get("title", ""), job.get("location", "")])
     )
 
-    if any(_contains(location_text, term) for term in VIETNAM_TERMS):
+    if any(_contains(direct_text, term) for term in VIETNAM_TERMS):
+        return True
+
+    if any(_contains(direct_text, term) for term in EXPLICIT_FOREIGN_TERMS):
+        return False
+
+    context_text = _normalize(job.get("context", ""))
+    if any(_contains(context_text, term) for term in VIETNAM_TERMS):
         return True
 
     return bool(job.get("assume_vietnam", False))
@@ -205,7 +163,6 @@ def _role_score(title, body, rules):
     title_score = 0
     body_score = 0
     matched = []
-
     for term, weight in rules.items():
         if _contains(title, term):
             title_score += weight * 2
@@ -213,17 +170,10 @@ def _role_score(title, body, rules):
         elif _contains(body, term):
             body_score += weight
             matched.append(term.strip())
-
     return title_score, body_score, list(dict.fromkeys(matched))
 
 
 def classify_job(job, threshold=7, require_vietnam=True):
-    """Classify IC roles while treating the vacancy title as authoritative.
-
-    Career pages often place several disciplines in one large container. If the
-    title explicitly identifies a target discipline, that title classification
-    wins over unrelated terms found elsewhere in the page body.
-    """
     title = _normalize(job.get("title", ""))
     description = _normalize(job.get("summary", ""))
     context = _normalize(job.get("context", ""))
@@ -243,24 +193,19 @@ def classify_job(job, threshold=7, require_vietnam=True):
     scored = []
     for role, rules in TARGET_ROLE_RULES.items():
         title_score, body_score, matched = _role_score(title, body, rules)
-        scored.append(
-            {
-                "role": role,
-                "title_score": title_score,
-                "body_score": body_score,
-                "score": title_score + body_score,
-                "matched": matched,
-            }
-        )
+        scored.append({
+            "role": role,
+            "title_score": title_score,
+            "body_score": body_score,
+            "score": title_score + body_score,
+            "matched": matched,
+        })
 
     title_matches = [item for item in scored if item["title_score"] > 0]
-    if title_matches:
-        best = max(
-            title_matches,
-            key=lambda item: (item["title_score"], item["score"]),
-        )
-    else:
-        best = max(scored, key=lambda item: item["score"])
+    best = max(
+        title_matches if title_matches else scored,
+        key=lambda item: (item["title_score"], item["score"]),
+    )
 
     best_role = best["role"]
     best_score = best["score"]
@@ -271,19 +216,11 @@ def classify_job(job, threshold=7, require_vietnam=True):
         strong_dv = any(
             term in best_terms
             for term in (
-                "soc verification",
-                "ip verification",
-                "rtl verification",
-                "uvm",
-                "systemverilog",
+                "soc verification", "ip verification", "rtl verification",
+                "uvm", "systemverilog",
             )
         )
-
-        has_ic_context = any(
-            _contains(text, anchor)
-            for anchor in SEMICONDUCTOR_ANCHORS
-        )
-
+        has_ic_context = any(_contains(text, anchor) for anchor in SEMICONDUCTOR_ANCHORS)
         if company not in TRUSTED_SEMICONDUCTOR_EMPLOYERS:
             if not has_ic_context:
                 return False, None, best_score, best_terms
