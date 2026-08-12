@@ -1,14 +1,29 @@
+import re
+from urllib.parse import urljoin
+
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
 
 
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
-    )
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
 }
+
+
+DATE_PATTERN = re.compile(
+    r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|"
+    r"Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|"
+    r"Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}",
+    flags=re.IGNORECASE,
+)
+
+
+def _clean(text):
+    return re.sub(r"\s+", " ", text or "").strip()
 
 
 def fetch_html_page(url):
@@ -17,58 +32,68 @@ def fetch_html_page(url):
         headers=HEADERS,
         timeout=20,
     )
-
     response.raise_for_status()
-
     return response.text
 
 
+def _candidate_title(anchor):
+    heading = anchor.find(["h1", "h2", "h3", "h4", "h5", "h6"])
+
+    if heading:
+        title = _clean(heading.get_text(" ", strip=True))
+        if title:
+            return title
+
+    return _clean(anchor.get_text(" ", strip=True))
+
+
 def extract_links(source):
-    """
-    Generic HTML collector.
-
-    It discovers candidate article links. More precise
-    source-specific collectors can replace this later.
-    """
-
+    """Collect candidate links from a targeted company/news page."""
     html = fetch_html_page(source["url"])
-
     soup = BeautifulSoup(html, "html.parser")
 
     articles = []
     seen_urls = set()
 
     for anchor in soup.find_all("a", href=True):
-        title = anchor.get_text(
-            " ",
-            strip=True,
-        )
+        title = _candidate_title(anchor)
+        href = _clean(anchor.get("href", ""))
 
-        href = anchor.get("href")
-
-        if not title or not href:
+        if not title or not href or len(title) < 20:
             continue
 
-        # Ignore tiny navigation labels.
-        if len(title) < 20:
-            continue
-
-        url = urljoin(
-            source["url"],
-            href,
-        )
+        url = urljoin(source["url"], href)
 
         if url in seen_urls:
             continue
 
-        seen_urls.add(url)
+        parent = anchor.find_parent(
+            ["article", "li", "section", "div"]
+        )
+        context = _clean(
+            parent.get_text(" ", strip=True)
+            if parent
+            else title
+        )
 
+        # Prevent huge navigation containers from becoming summaries.
+        summary = context
+        if summary.startswith(title):
+            summary = _clean(summary[len(title):])
+        summary = summary[:700]
+
+        date_match = DATE_PATTERN.search(context)
+        published = date_match.group(0) if date_match else ""
+
+        seen_urls.add(url)
         articles.append({
             "source": source["name"],
+            "company": source.get("company"),
+            "category": source.get("category"),
             "title": title,
             "link": url,
-            "published": "",
-            "summary": "",
+            "published": published,
+            "summary": summary,
         })
 
     return articles
@@ -82,13 +107,10 @@ def fetch_html_news(source):
             f"[HTML RESULT] {source['name']} | "
             f"{len(articles)} candidates"
         )
-
         return articles
 
     except requests.RequestException as error:
         print(
-            f"[HTML ERROR] {source['name']} | "
-            f"{error}"
+            f"[HTML ERROR] {source['name']} | {error}"
         )
-
         return []

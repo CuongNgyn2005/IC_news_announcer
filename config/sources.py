@@ -12,7 +12,6 @@ NEWS_SOURCES = [
         "enabled": True,
         "priority": 2,
     },
-
     {
         "name": "IEEE Spectrum",
         "company": None,
@@ -23,34 +22,23 @@ NEWS_SOURCES = [
         "priority": 2,
     },
 
-    # ============================================================
-    # MARVELL
-    # ============================================================
-
+    # Marvell rejects simple scraper requests with HTTP 403. Google
+    # News RSS gives us indexed Marvell newsroom URLs while still
+    # linking users to Marvell's original articles.
     {
         "name": "Marvell Newsroom",
         "company": "Marvell",
         "category": "company_product",
-        "type": "company",
-        "url": "https://www.marvell.com/company/newsroom/press-releases.html",
-        "enabled": False,
+        "type": "rss",
+        "url": (
+            "https://news.google.com/rss/search?"
+            "q=site%3Amarvell.com%2Fcompany%2Fnewsroom+"
+            "Marvell+semiconductor+when%3A30d"
+            "&hl=en-US&gl=US&ceid=US%3Aen"
+        ),
+        "enabled": True,
         "priority": 1,
     },
-
-    {
-        "name": "Marvell Blogs",
-        "company": "Marvell",
-        "category": "company_product",
-        "type": "html",
-        "url": "https://www.marvell.com/blogs.html",
-        "enabled": False,
-        "priority": 1,
-    },
-
-    # ============================================================
-    # AMPERE COMPUTING
-    # ============================================================
-
     {
         "name": "Ampere Computing Newsroom",
         "company": "Ampere Computing",
@@ -60,39 +48,24 @@ NEWS_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
-    # ============================================================
-    # SKYECHIP
-    # ============================================================
-
     {
-        "name": "SkyeChip",
+        "name": "SkyeChip Media Releases",
         "company": "SkyeChip",
         "category": "company_product",
         "type": "html",
-        "url": "https://skyechip.com/",
-        "enabled": False,
+        "url": "https://skyechip.com/category/media-release/",
+        "enabled": True,
         "priority": 1,
     },
-
-    # ============================================================
-    # HCLTECH
-    # ============================================================
-
     {
-        "name": "HCLTech",
+        "name": "HCLTech Semiconductor",
         "company": "HCLTech",
         "category": "company_product",
         "type": "html",
-        "url": "https://www.hcltech.com/",
-        "enabled": False,
+        "url": "https://www.hcltech.com/press-release?lang=en",
+        "enabled": True,
         "priority": 1,
     },
-
-    # ============================================================
-    # TRUECHIP
-    # ============================================================
-
     {
         "name": "Truechip",
         "company": "Truechip",
@@ -102,39 +75,30 @@ NEWS_SOURCES = [
         "enabled": True,
         "priority": 1,
     },
-
-    # ============================================================
-    # INFINEON
-    # ============================================================
-
     {
-        "name": "Infineon Technologies",
+        "name": "Infineon Technology News",
         "company": "Infineon Technologies",
         "category": "company_product",
         "type": "html",
-        "url": "https://www.infineon.com/",
-        "enabled": False,
+        "url": "https://www.infineon.com/about/press/technology-news",
+        "enabled": True,
         "priority": 1,
     },
-
-    # ============================================================
-    # IDEAS2SILICON
-    # ============================================================
-
     {
-        "name": "Ideas2Silicon",
+        "name": "Ideas2Silicon News",
         "company": "Ideas2Silicon",
         "category": "company_product",
-        "type": "html",
-        "url": "https://www.ideas2silicon.com/",
-        "enabled": False,
+        "type": "rss",
+        "url": (
+            "https://news.google.com/rss/search?"
+            "q=%22Ideas2Silicon%22+semiconductor+when%3A90d"
+            "&hl=en-US&gl=US&ceid=US%3Aen"
+        ),
+        "enabled": True,
         "priority": 1,
     },
 
-    # ============================================================
-    # OTHER IMPORTANT IC SOURCES
-    # ============================================================
-
+    # Additional industry sources kept ready for later expansion.
     {
         "name": "Synopsys",
         "company": "Synopsys",
@@ -144,7 +108,6 @@ NEWS_SOURCES = [
         "enabled": False,
         "priority": 2,
     },
-
     {
         "name": "Cadence",
         "company": "Cadence",
@@ -154,7 +117,6 @@ NEWS_SOURCES = [
         "enabled": False,
         "priority": 2,
     },
-
     {
         "name": "imec",
         "company": "imec",
@@ -164,7 +126,6 @@ NEWS_SOURCES = [
         "enabled": False,
         "priority": 2,
     },
-
     {
         "name": "Semiconductor Engineering",
         "company": None,
@@ -177,71 +138,120 @@ NEWS_SOURCES = [
 ]
 
 
-# ================================================================
-# JOB SOURCES
-# ================================================================
-
 JOB_SOURCES = [
     {
-        "name": "Marvell Careers",
+        "name": "Marvell Vietnam Careers",
         "company": "Marvell",
-        "url": "https://www.marvell.com/company/careers.html",
+        "type": "workday",
+        "url": "https://marvell.wd1.myworkdayjobs.com/MarvellCareers",
+        "workday_tenant": "marvell",
+        "workday_site": "MarvellCareers",
         "country_filter": "Vietnam",
-        "enabled": False,
+        "search_terms": [
+            "design verification",
+            "rtl",
+            "logic design",
+            "physical design",
+            "layout",
+            "analog design",
+            "dft",
+            "silicon validation",
+            "fpga",
+        ],
+        "enabled": True,
         "priority": 1,
     },
-
     {
-        "name": "Ampere Computing Careers",
+        "name": "Ampere Computing Vietnam Careers",
         "company": "Ampere Computing",
-        "url": "https://careers.amperecomputing.com/",
+        "type": "html_jobs",
+        "url": (
+            "https://careers.amperecomputing.com/"
+            "search/jobs/in/ho-chi-minh-city"
+        ),
         "country_filter": "Vietnam",
-        "enabled": False,
+        "default_location": "Ho Chi Minh City, Vietnam",
+        "assume_vietnam": True,
+        "enabled": True,
         "priority": 1,
     },
-
     {
         "name": "SkyeChip Careers",
         "company": "SkyeChip",
+        "type": "catalog_jobs",
         "url": "https://skyechip.com/career-opportunities/",
         "country_filter": "Vietnam",
-        "enabled": False,
+        "default_location": "Vietnam",
+        "assume_vietnam": True,
+        "enabled": True,
         "priority": 1,
     },
-
     {
-        "name": "HCLTech Careers",
+        "name": "HCLTech Vietnam Careers",
         "company": "HCLTech",
-        "url": "https://www.hcltech.com/careers",
+        "type": "query_html_jobs",
+        "url": "https://careers.hcltech.com/search/",
+        "query_param": "q",
+        "location_param": "locationsearch",
         "country_filter": "Vietnam",
-        "enabled": False,
+        "search_terms": [
+            "design verification",
+            "systemverilog",
+            "rtl",
+            "physical design",
+            "analog",
+            "dft",
+            "silicon validation",
+            "fpga",
+        ],
+        "default_location": "Vietnam",
+        "assume_vietnam": True,
+        "enabled": True,
         "priority": 1,
     },
-
     {
         "name": "Truechip Careers",
         "company": "Truechip",
-        "url": "https://www.truechip.net/",
+        "type": "catalog_jobs",
+        "url": "https://www.truechip.net/explore-careers",
         "country_filter": "Vietnam",
-        "enabled": False,
+        "default_location": "Vietnam",
+        "assume_vietnam": True,
+        "enabled": True,
         "priority": 1,
     },
-
     {
-        "name": "Infineon Careers",
+        "name": "Infineon Vietnam Careers",
         "company": "Infineon Technologies",
-        "url": "https://www.infineon.com/cms/en/careers/",
+        "type": "query_html_jobs",
+        "url": "https://jobs.infineon.com/careers",
+        "query_param": "query",
+        "location_param": "location",
         "country_filter": "Vietnam",
-        "enabled": False,
+        "search_terms": [
+            "verification",
+            "physical design",
+            "layout",
+            "analog",
+            "digital design",
+            "rtl",
+            "dft",
+            "validation",
+        ],
+        "default_location": "Vietnam",
+        "assume_vietnam": False,
+        "enabled": True,
         "priority": 1,
     },
-
     {
         "name": "Ideas2Silicon Careers",
         "company": "Ideas2Silicon",
+        "type": "catalog_jobs",
         "url": "https://www.ideas2silicon.com/career.html",
         "country_filter": "Vietnam",
-        "enabled": False,
+        "default_location": "Vietnam",
+        "assume_vietnam": True,
+        "enabled": True,
         "priority": 1,
     },
 ]
