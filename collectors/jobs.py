@@ -7,6 +7,12 @@ from bs4 import BeautifulSoup
 from config.sources import JOB_SOURCES
 
 
+try:
+    from curl_cffi import requests as curl_requests
+except ImportError:
+    curl_requests = None
+
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -55,6 +61,34 @@ def _request_html(url, params=None):
     )
     response.raise_for_status()
     return response.text, response.url
+
+
+def _browser_get(url, params=None, accept="text/html"):
+    headers = {
+        **HEADERS,
+        "Accept": accept,
+        "Referer": url,
+    }
+
+    if curl_requests is not None:
+        response = curl_requests.get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=25,
+            impersonate="chrome",
+        )
+        response.raise_for_status()
+        return response
+
+    response = requests.get(
+        url,
+        headers=headers,
+        params=params,
+        timeout=25,
+    )
+    response.raise_for_status()
+    return response
 
 
 def _job_key(job):
@@ -148,7 +182,7 @@ def _parse_html_job_page(html, source, page_url):
             "title": title,
             "link": url,
             "location": location,
-            "country": source.get("country_filter", ""),
+            "country": "",
             "posted": "",
             "summary": "",
             "context": context,
@@ -199,14 +233,18 @@ def fetch_catalog_jobs(source):
             if container
             else title
         )
+        location = _extract_location(
+            context,
+            source.get("default_location", ""),
+        )
 
         jobs.append({
             "source": source["name"],
             "company": source["company"],
             "title": title,
             "link": source["url"],
-            "location": source.get("default_location", ""),
-            "country": source.get("country_filter", ""),
+            "location": location,
+            "country": "",
             "posted": "",
             "summary": "",
             "context": context,
@@ -233,13 +271,98 @@ def fetch_catalog_jobs(source):
             "company": source["company"],
             "title": title,
             "link": source["url"],
-            "location": source.get("default_location", ""),
-            "country": source.get("country_filter", ""),
+            "location": _extract_location(
+                text,
+                source.get("default_location", ""),
+            ),
+            "country": "",
             "posted": "",
             "summary": "",
             "context": text,
             "assume_vietnam": source.get("assume_vietnam", False),
         })
+
+    return _dedupe(jobs)
+
+
+def fetch_ttc_jobs(source):
+    """Fetch TalentTech/TTC Portals jobs through its public JSON listing feed."""
+    json_url = source.get(
+        "json_url",
+        urljoin(source["url"], "/search/jobs.json"),
+    )
+
+    jobs = []
+    page = 1
+    max_pages = int(source.get("max_pages", 10))
+
+    while page <= max_pages:
+        response = _browser_get(
+            json_url,
+            params={"page": page},
+            accept="application/json",
+        )
+        payload = response.json()
+        entries = payload.get("entries") or []
+
+        for entry in entries:
+            title = _clean(entry.get("title", ""))
+            location = _clean(entry.get("location", ""))
+            permalink = _clean(entry.get("permalink", ""))
+
+            if not title or not permalink:
+                continue
+
+            # TTC returns a global board. Reject non-Vietnam rows at
+            # collection time before the role classifier sees them.
+            if not VIETNAM_LOCATION_PATTERN.search(location):
+                continue
+
+            link = (
+                permalink
+                if permalink.startswith("http")
+                else urljoin(source["url"], permalink)
+            )
+
+            jobs.append({
+                "source": source["name"],
+                "company": source["company"],
+                "title": title,
+                "link": link,
+                "location": location,
+                "country": "",
+                "posted": _clean(
+                    entry.get("date_posted", entry.get("posted", ""))
+                ),
+                "summary": "",
+                "context": " ".join(
+                    [
+                        title,
+                        location,
+                        _clean(entry.get("category", "")),
+                    ]
+                ),
+                "assume_vietnam": False,
+            })
+
+        if not entries:
+            break
+
+        current_page = payload.get("current_page", page)
+        per_page = payload.get("per_page", len(entries))
+        total_entries = payload.get("total_entries")
+
+        try:
+            seen = int(current_page) * int(per_page)
+        except (TypeError, ValueError):
+            seen = page * len(entries)
+
+        if isinstance(total_entries, int) and seen >= total_entries:
+            break
+        if len(entries) < int(per_page or len(entries)):
+            break
+
+        page += 1
 
     return _dedupe(jobs)
 
@@ -338,6 +461,8 @@ def fetch_jobs():
         try:
             if source["type"] == "workday":
                 source_jobs = fetch_workday_jobs(source)
+            elif source["type"] == "ttc_jobs":
+                source_jobs = fetch_ttc_jobs(source)
             elif source["type"] == "html_jobs":
                 source_jobs = fetch_html_jobs(source)
             elif source["type"] == "query_html_jobs":
@@ -360,6 +485,10 @@ def fetch_jobs():
             TypeError,
             KeyError,
         ) as error:
+            print(f"[JOB ERROR] {source['name']} | {error}")
+        except Exception as error:
+            # curl_cffi raises its own request exceptions. Keep one
+            # protected source from stopping all other companies.
             print(f"[JOB ERROR] {source['name']} | {error}")
 
     return _dedupe(jobs)
