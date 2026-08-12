@@ -1,5 +1,5 @@
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -47,6 +47,21 @@ def _candidate_title(anchor):
     return _clean(anchor.get_text(" ", strip=True))
 
 
+def _allowed_article_url(source, url):
+    """Prevent broad corporate pages from turning navigation links into news."""
+    name = source.get("name", "").lower()
+    parsed = urlparse(url)
+    path = parsed.path.lower()
+
+    if name == "infineon technology news":
+        return "/technology-news/" in path
+
+    if name == "skyechip media releases":
+        return "/media-release/" in path or "/category/media-release/" in path
+
+    return True
+
+
 def extract_links(source):
     """Collect candidate links from a targeted company/news page."""
     html = fetch_html_page(source["url"])
@@ -64,6 +79,10 @@ def extract_links(source):
 
         url = urljoin(source["url"], href)
 
+        if not _allowed_article_url(source, url):
+            continue
+        if url.rstrip("/") == source["url"].rstrip("/"):
+            continue
         if url in seen_urls:
             continue
 
@@ -76,7 +95,11 @@ def extract_links(source):
             else title
         )
 
-        # Prevent huge navigation containers from becoming summaries.
+        # Prevent a huge site/navigation container from making an unrelated
+        # link look semiconductor-related. Keep only a small card-sized window.
+        if len(context) > 1400:
+            context = title
+
         summary = context
         if summary.startswith(title):
             summary = _clean(summary[len(title):])
@@ -85,6 +108,9 @@ def extract_links(source):
         date_match = DATE_PATTERN.search(context)
         published = date_match.group(0) if date_match else ""
 
+        # Infineon's technology-news page contains a very large global nav.
+        # A real technology-news card/detail link has a technology-news path;
+        # limit the list to the current page's first reasonable batch.
         seen_urls.add(url)
         articles.append({
             "source": source["name"],
@@ -95,6 +121,9 @@ def extract_links(source):
             "published": published,
             "summary": summary,
         })
+
+        if source.get("name") == "Infineon Technology News" and len(articles) >= 40:
+            break
 
     return articles
 
