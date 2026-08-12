@@ -201,17 +201,38 @@ def is_vietnam_job(job):
     return bool(job.get("assume_vietnam", False))
 
 
-def classify_job(job, threshold=7, require_vietnam=True):
-    """Classify IC roles; optionally postpone the Vietnam gate.
+def _role_score(title, body, rules):
+    title_score = 0
+    body_score = 0
+    matched = []
 
-    main.py first runs this with require_vietnam=False so only potentially
-    relevant IC roles incur a job-detail request. After detail enrichment it
-    runs the normal Vietnam-gated classification again.
+    for term, weight in rules.items():
+        if _contains(title, term):
+            title_score += weight * 2
+            matched.append(term.strip())
+        elif _contains(body, term):
+            body_score += weight
+            matched.append(term.strip())
+
+    return title_score, body_score, list(dict.fromkeys(matched))
+
+
+def classify_job(job, threshold=7, require_vietnam=True):
+    """Classify IC roles while treating the vacancy title as authoritative.
+
+    Career pages often place several disciplines in one large container. If the
+    title explicitly identifies a target discipline, that title classification
+    wins over unrelated terms found elsewhere in the page body.
     """
     title = _normalize(job.get("title", ""))
     description = _normalize(job.get("summary", ""))
     context = _normalize(job.get("context", ""))
-    text = " ".join([title, description, context])
+
+    if context.startswith(title):
+        context = context[len(title):].strip()
+
+    body = " ".join([description, context])
+    text = " ".join([title, body])
 
     if not title:
         return False, None, 0, []
@@ -219,26 +240,31 @@ def classify_job(job, threshold=7, require_vietnam=True):
     if any(_contains(text, term) for term in EXCLUDE_TERMS):
         return False, None, 0, []
 
-    best_role = None
-    best_score = 0
-    best_terms = []
-
+    scored = []
     for role, rules in TARGET_ROLE_RULES.items():
-        score = 0
-        matched = []
+        title_score, body_score, matched = _role_score(title, body, rules)
+        scored.append(
+            {
+                "role": role,
+                "title_score": title_score,
+                "body_score": body_score,
+                "score": title_score + body_score,
+                "matched": matched,
+            }
+        )
 
-        for term, weight in rules.items():
-            if _contains(title, term):
-                score += weight * 2
-                matched.append(term.strip())
-            elif _contains(text, term):
-                score += weight
-                matched.append(term.strip())
+    title_matches = [item for item in scored if item["title_score"] > 0]
+    if title_matches:
+        best = max(
+            title_matches,
+            key=lambda item: (item["title_score"], item["score"]),
+        )
+    else:
+        best = max(scored, key=lambda item: item["score"])
 
-        if score > best_score:
-            best_role = role
-            best_score = score
-            best_terms = list(dict.fromkeys(matched))
+    best_role = best["role"]
+    best_score = best["score"]
+    best_terms = best["matched"]
 
     if best_score >= threshold and best_role == "Design Verification":
         company = _normalize(job.get("company", ""))
