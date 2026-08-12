@@ -100,7 +100,7 @@ def check_ttc(source):
     headers = {
         **HEADERS,
         "Accept": "application/json",
-        "Referer": source["url"],
+        "Referer": source.get("referer", source["url"]),
     }
 
     try:
