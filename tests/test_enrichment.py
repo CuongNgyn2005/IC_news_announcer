@@ -1,6 +1,8 @@
 import unittest
+from datetime import datetime, timezone
 
 from collectors.job_details import extract_job_requirements
+from filters.recency import is_recent_article
 from summarizers.news_summary import NOT_STATED, summarize_text
 
 
@@ -46,6 +48,22 @@ class JobDetailExtractionTests(unittest.TestCase):
         self.assertEqual(result["experience_requirement"], "Not stated")
         self.assertEqual(result["english_requirement"], "Not stated")
 
+    def test_title_seniority_beats_unrelated_body_words(self):
+        result = extract_job_requirements(
+            "Physical Design Engineer (Senior/Staff)",
+            "Ho Chi Minh City, Vietnam",
+            "We mentor graduate and junior engineers and work with managers.",
+        )
+        self.assertEqual(result["seniority"], "Senior / Staff")
+
+    def test_experienced_title_is_not_mislabeled_junior(self):
+        result = extract_job_requirements(
+            "Design Verification Engineer (Experienced)",
+            "Ho Chi Minh City, Vietnam",
+            "Junior team members may also participate in the project.",
+        )
+        self.assertEqual(result["seniority"], "Experienced")
+
 
 class NewsSummaryTests(unittest.TestCase):
     def test_extracts_supported_technical_metrics(self):
@@ -75,6 +93,21 @@ class NewsSummaryTests(unittest.TestCase):
 
         self.assertEqual(summary["power"], NOT_STATED)
         self.assertEqual(summary["area_density"], NOT_STATED)
+
+
+class NewsRecencyTests(unittest.TestCase):
+    def test_rejects_old_dated_company_news(self):
+        now = datetime(2026, 8, 12, tzinfo=timezone.utc)
+        article = {"published": "2026-03-19"}
+        self.assertFalse(is_recent_article(article, max_days=60, now=now))
+
+    def test_accepts_recent_dated_news(self):
+        now = datetime(2026, 8, 12, tzinfo=timezone.utc)
+        article = {"published": "Jul 29, 2026"}
+        self.assertTrue(is_recent_article(article, max_days=60, now=now))
+
+    def test_undated_items_remain_eligible_for_persistent_dedupe(self):
+        self.assertTrue(is_recent_article({"published": ""}))
 
 
 if __name__ == "__main__":
