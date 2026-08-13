@@ -49,10 +49,25 @@ TITLE_SENIORITY_RULES = (
     (r"\bexperienced\b", "Experienced"),
 )
 
+# Job sites describe experience in several ways. Some explicitly say
+# "3 years experience", while others only say "3+ years in RTL design" or
+# "minimum 5 years of hands-on verification". Keep these patterns separate
+# from generic year/date matching so company-history text is not mistaken for
+# a candidate requirement.
 EXPERIENCE_PATTERNS = (
-    re.compile(r"\b(?:(?:at least|min(?:imum)?(?: of)?)\s*)?(\d+)\s*(?:\+|plus)?\s*(?:years?|yrs?)(?:\s+of)?(?:\s+relevant)?\s+experience\b", re.IGNORECASE),
+    re.compile(r"\b(?:(?:at least|min(?:imum)?(?: of)?|more than|over)\s*)?(\d+)\s*(?:\+|plus)?\s*(?:years?|yrs?)(?:\s+of)?(?:\s+relevant)?\s+experience\b", re.IGNORECASE),
     re.compile(r"\b(\d+)\s*(?:-|–|—|to)\s*(\d+)\s*(?:years?|yrs?)(?:\s+of)?(?:\s+relevant)?\s+experience\b", re.IGNORECASE),
     re.compile(r"\bexperience\s*(?:of|:)?\s*(\d+)\s*(?:\+|plus)?\s*(?:years?|yrs?)\b", re.IGNORECASE),
+    re.compile(r"\b(?:at least|min(?:imum)?(?: of)?|more than|over)\s+(\d+)\s*(?:\+|plus)?\s*(?:years?|yrs?)\b", re.IGNORECASE),
+    re.compile(r"\b(\d+)\s*(?:\+|plus)\s*(?:years?|yrs?)\s+(?:of|in|with)\b", re.IGNORECASE),
+    re.compile(r"\b(\d+)\s*(?:-|–|—|to)\s*(\d+)\s*(?:years?|yrs?)\s+(?:of|in|with)\b", re.IGNORECASE),
+)
+
+EXPERIENCE_CONTEXT_TERMS = (
+    "experience", "required", "requirement", "preferred", "qualification",
+    "candidate", "must have", "hands-on", "hands on", "working in",
+    "work in", "design", "verification", "validation", "rtl", "asic",
+    "soc", "layout", "physical design", "dft", "fpga", "engineering",
 )
 
 ENGLISH_PATTERNS = (
@@ -153,18 +168,34 @@ def _sentence_candidates(text):
     return [sentence.strip(" -•\t") for sentence in re.split(r"(?<=[.!?])\s+|\s*[•▪●]\s*", cleaned) if len(sentence.strip()) >= 12]
 
 
+def _looks_like_experience_requirement(sentence):
+    lower = sentence.lower()
+    return any(term in lower for term in EXPERIENCE_CONTEXT_TERMS)
+
+
 def extract_experience(text):
     cleaned = _clean(text)
     sentences = _sentence_candidates(cleaned)
+
+    # Prefer a complete requirement sentence because it preserves useful
+    # qualifiers such as "at least", the domain, and whether it is preferred.
     for sentence in sentences:
-        if "experience" in sentence.lower() and any(pattern.search(sentence) for pattern in EXPERIENCE_PATTERNS):
+        if not _looks_like_experience_requirement(sentence):
+            continue
+        if any(pattern.search(sentence) for pattern in EXPERIENCE_PATTERNS):
             return sentence[:220]
+
+    # Fallback for pages whose HTML flattening removed sentence boundaries.
     for pattern in EXPERIENCE_PATTERNS:
         match = pattern.search(cleaned)
-        if match:
-            start = max(0, match.start() - 60)
-            end = min(len(cleaned), match.end() + 80)
-            return cleaned[start:end].strip()[:220]
+        if not match:
+            continue
+        start = max(0, match.start() - 80)
+        end = min(len(cleaned), match.end() + 120)
+        window = cleaned[start:end].strip()
+        if _looks_like_experience_requirement(window):
+            return window[:220]
+
     return "Not stated"
 
 
