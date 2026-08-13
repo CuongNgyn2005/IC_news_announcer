@@ -1,8 +1,10 @@
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
 DB_PATH = Path("data") / "ic_watch.db"
+JOB_REANNOUNCE_DAYS = 7
 
 
 def get_connection():
@@ -68,49 +70,157 @@ def save_article(article):
         )
 
 
-def job_exists(job_key, job=None):
-    """Check exact key and a stable company/title/link identity.
+def _stable_job_identity(job):
+    if not job:
+        return None
 
-    Location, seniority and role metadata can improve as parsers are fixed. The
-    old job key included location, which could cause an already-announced role
-    to be sent again after a location parser improvement. The stable identity
-    fallback prevents that while still allowing two jobs with the same title
-    when they have different posting URLs.
+    company = str(job.get("company", "") or "").strip().lower()
+    title = str(job.get("title", "") or "").strip().lower()
+    url = str(job.get("link", "") or "").strip()
+
+    if not company or not title or not url:
+        return None
+    return company, title, url
+
+
+def _find_job_row(conn, job_key, job=None):
+    """Return the newest matching stored job row as ``(id, sent_at)``.
+
+    The current key deliberately ignores derived metadata. The stable
+    company/title/URL fallback also recognizes rows written by older parser
+    versions whose key formula was different.
+    """
+    row = conn.execute(
+        """
+        SELECT id, sent_at
+        FROM jobs
+        WHERE job_key = ?
+        ORDER BY datetime(sent_at) DESC, id DESC
+        LIMIT 1
+        """,
+        (job_key,),
+    ).fetchone()
+    if row is not None:
+        return row
+
+    identity = _stable_job_identity(job)
+    if identity is None:
+        return None
+
+    return conn.execute(
+        """
+        SELECT id, sent_at
+        FROM jobs
+        WHERE lower(trim(company)) = ?
+          AND lower(trim(title)) = ?
+          AND trim(COALESCE(url, '')) = ?
+        ORDER BY datetime(sent_at) DESC, id DESC
+        LIMIT 1
+        """,
+        identity,
+    ).fetchone()
+
+
+def job_exists(job_key, job=None):
+    """Return whether this job identity has ever been stored.
+
+    This remains useful for first-run baseline handling. Normal production job
+    announcements use :func:`job_in_quiet_period` instead, so a still-open job
+    can reappear after its one-week quiet period.
     """
     with get_connection() as conn:
-        result = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_key = ?",
-            (job_key,),
-        ).fetchone()
-        if result is not None or not job:
-            return result is not None
+        return _find_job_row(conn, job_key, job) is not None
 
-        company = str(job.get("company", "") or "").strip().lower()
-        title = str(job.get("title", "") or "").strip().lower()
-        url = str(job.get("link", "") or "").strip()
 
-        if not company or not title or not url:
-            return False
+def _parse_sent_at(value):
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text.replace(" ", "T", 1))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
-        result = conn.execute(
-            """
-            SELECT 1 FROM jobs
-            WHERE lower(trim(company)) = ?
-              AND lower(trim(title)) = ?
-              AND trim(COALESCE(url, '')) = ?
-            LIMIT 1
-            """,
-            (company, title, url),
-        ).fetchone()
 
-    return result is not None
+def job_in_quiet_period(job_key, job=None, quiet_days=JOB_REANNOUNCE_DAYS, now=None):
+    """Return True while a previously announced job is inside its quiet window.
+
+    Once ``quiet_days`` have elapsed since the last successful send/baseline,
+    the same still-visible posting becomes eligible to be announced again.
+    News behavior is intentionally separate and remains permanent one-time
+    deduplication by article URL.
+    """
+    with get_connection() as conn:
+        row = _find_job_row(conn, job_key, job)
+
+    if row is None:
+        return False
+
+    sent_at = _parse_sent_at(row[1])
+    if sent_at is None:
+        # Be conservative with a malformed legacy timestamp: do not create an
+        # immediate duplicate alert simply because the timestamp cannot parse.
+        return True
+
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    else:
+        current = current.astimezone(timezone.utc)
+
+    return current - sent_at < timedelta(days=quiet_days)
 
 
 def save_job(job):
+    """Store a job send and refresh ``sent_at`` when it is re-announced.
+
+    Updating the existing identity is essential for the seven-day lifecycle:
+    every successful Telegram send starts a new quiet period. A stable identity
+    fallback keeps legacy rows from being duplicated after parser/key changes.
+    """
     with get_connection() as conn:
+        row = _find_job_row(conn, job["job_key"], job)
+
+        values = (
+            job.get("link", ""),
+            job["title"],
+            job.get("company", ""),
+            job.get("source", ""),
+            job.get("location", ""),
+            job.get("role", ""),
+            job.get("posted", ""),
+            job.get("job_score", 0),
+        )
+
+        if row is not None:
+            conn.execute(
+                """
+                UPDATE jobs
+                SET url = ?,
+                    title = ?,
+                    company = ?,
+                    source = ?,
+                    location = ?,
+                    role = ?,
+                    posted = ?,
+                    score = ?,
+                    sent_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (*values, row[0]),
+            )
+            return
+
         conn.execute(
             """
-            INSERT OR IGNORE INTO jobs
+            INSERT INTO jobs
             (
                 job_key,
                 url,
@@ -124,15 +234,5 @@ def save_job(job):
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (
-                job["job_key"],
-                job.get("link", ""),
-                job["title"],
-                job.get("company", ""),
-                job.get("source", ""),
-                job.get("location", ""),
-                job.get("role", ""),
-                job.get("posted", ""),
-                job.get("job_score", 0),
-            ),
+            (job["job_key"], *values),
         )
