@@ -28,6 +28,32 @@ class JobDetailExtractionTests(unittest.TestCase):
         self.assertIn("TOEIC", result["english_requirement"])
         self.assertTrue(result["qualification_requirements"])
 
+    def test_extracts_plus_years_without_word_experience(self):
+        result = extract_job_requirements(
+            "RTL Design Engineer",
+            "Ho Chi Minh City, Vietnam",
+            "Candidates should have 5+ years in RTL design, synthesis, and timing closure.",
+        )
+        self.assertIn("5+ years", result["experience_requirement"])
+        self.assertIn("RTL design", result["experience_requirement"])
+
+    def test_extracts_minimum_years_hands_on_requirement(self):
+        result = extract_job_requirements(
+            "Design Verification Engineer",
+            "Da Nang, Vietnam",
+            "Minimum 4 years of hands-on SystemVerilog and UVM verification is required.",
+        )
+        self.assertIn("Minimum 4 years", result["experience_requirement"])
+        self.assertIn("UVM", result["experience_requirement"])
+
+    def test_company_history_is_not_experience_requirement(self):
+        result = extract_job_requirements(
+            "Physical Design Engineer",
+            "Hanoi, Vietnam",
+            "Our semiconductor company celebrates 25 years of innovation worldwide.",
+        )
+        self.assertEqual(result["experience_requirement"], "Not stated")
+
     def test_preserves_multiple_vietnam_cities(self):
         result = extract_job_requirements(
             "Physical Design Engineer",
