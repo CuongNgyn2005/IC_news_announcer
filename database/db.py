@@ -121,17 +121,6 @@ def _find_job_row(conn, job_key, job=None):
     ).fetchone()
 
 
-def job_exists(job_key, job=None):
-    """Return whether this job identity has ever been stored.
-
-    This remains useful for first-run baseline handling. Normal production job
-    announcements use :func:`job_in_quiet_period` instead, so a still-open job
-    can reappear after its one-week quiet period.
-    """
-    with get_connection() as conn:
-        return _find_job_row(conn, job_key, job) is not None
-
-
 def _parse_sent_at(value):
     if value is None:
         return None
@@ -165,8 +154,6 @@ def job_in_quiet_period(job_key, job=None, quiet_days=JOB_REANNOUNCE_DAYS, now=N
 
     sent_at = _parse_sent_at(row[1])
     if sent_at is None:
-        # Be conservative with a malformed legacy timestamp: do not create an
-        # immediate duplicate alert simply because the timestamp cannot parse.
         return True
 
     current = now or datetime.now(timezone.utc)
@@ -176,6 +163,16 @@ def job_in_quiet_period(job_key, job=None, quiet_days=JOB_REANNOUNCE_DAYS, now=N
         current = current.astimezone(timezone.utc)
 
     return current - sent_at < timedelta(days=quiet_days)
+
+
+def job_exists(job_key, job=None):
+    """Compatibility gate used by ``main.py`` for job announcements.
+
+    Historically this meant "has ever been seen". It now means "is still in
+    the seven-day quiet period" so a still-open posting may reappear after one
+    week. Article deduplication is unchanged and remains one-time only.
+    """
+    return job_in_quiet_period(job_key, job)
 
 
 def save_job(job):
