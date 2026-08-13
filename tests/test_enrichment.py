@@ -46,6 +46,31 @@ class JobDetailExtractionTests(unittest.TestCase):
         self.assertIn("Minimum 4 years", result["experience_requirement"])
         self.assertIn("UVM", result["experience_requirement"])
 
+    def test_extracts_relevant_working_experience_wording(self):
+        result = extract_job_requirements(
+            "Physical Design Engineer",
+            "Ho Chi Minh City, Vietnam",
+            "Candidate must have at least 3 years of relevant working experience in physical design.",
+        )
+        self.assertIn("3 years", result["experience_requirement"])
+        self.assertIn("working experience", result["experience_requirement"])
+
+    def test_extracts_compact_year_range_from_job_title(self):
+        result = extract_job_requirements(
+            "RTL Design Engineer (3-5 yrs)",
+            "Quy Nhon, Vietnam",
+            "RTL Design Engineer (3-5 yrs)",
+        )
+        self.assertIn("3-5 yrs", result["experience_requirement"])
+
+    def test_extracts_explicit_no_experience_requirement(self):
+        result = extract_job_requirements(
+            "Design Verification Trainee",
+            "Ho Chi Minh City, Vietnam",
+            "Fresh graduates are welcome. SystemVerilog knowledge is preferred.",
+        )
+        self.assertIn("Fresh graduates", result["experience_requirement"])
+
     def test_company_history_is_not_experience_requirement(self):
         result = extract_job_requirements(
             "Physical Design Engineer",
