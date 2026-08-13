@@ -77,7 +77,6 @@ def _requirements_text(job):
         qualification_text = "  • Not stated in the source text available to the bot."
 
     return (
-        f"• Experience: {job.get('experience_requirement') or 'Not stated'}\n"
         f"• English / IELTS / TOEIC: {job.get('english_requirement') or 'Not stated'}\n"
         "• Key qualifications:\n"
         f"{qualification_text}"
@@ -178,7 +177,8 @@ def process_jobs():
             accepted.append(job)
             print(
                 f"[JOB ACCEPT] {score:2d} | {job.get('company', '')} | {job['title']} | "
-                f"{_display_location(job)} | {job.get('seniority', 'Not stated')} | {role}"
+                f"{_display_location(job)} | {job.get('seniority', 'Not stated')} | {role} | "
+                f"Experience: {job.get('experience_requirement') or 'Not stated'}"
             )
         else:
             print(
@@ -209,12 +209,14 @@ def process_jobs():
             continue
 
         posted_line = f"🗓 Posted: {job['posted']}\n" if job.get("posted") else ""
+        experience = job.get("experience_requirement") or "Not stated"
         message = (
             "🚨 JOBS ALERT\n\n"
             f"💼 {job['title']}\n"
             f"🏢 Company: {job.get('company', '')}\n"
             f"📍 Location: {_display_location(job)}\n"
             f"🏷 Level: {job.get('seniority') or 'Not stated'}\n"
+            f"🧭 Experience: {experience}\n"
             f"🎯 IC Track: {job.get('role', '')}\n"
             f"{posted_line}\n"
             "Requirements to qualify:\n"
