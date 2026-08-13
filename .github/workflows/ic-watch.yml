@@ -1,17 +1,19 @@
-name: IC Watch Scheduled Run
+name: IC Watch Live Run
 
 on:
-  schedule:
-    # Production policy: exactly one automatic run per day at 09:00 Vietnam
-    # time. There are intentionally no push or workflow_dispatch triggers, so
-    # repository changes and manual dispatches cannot announce outside this
-    # daily window.
-    - cron: "0 9 * * *"
-      timezone: "Asia/Ho_Chi_Minh"
+  # Temporary validation mode: there is no clock-based production schedule.
+  # The workflow can be started manually at any time.
+  workflow_dispatch:
+  # This path-scoped push trigger starts one immediate live validation run for
+  # this workflow change without making ordinary source-code pushes announce.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ic-watch.yml"
 
 concurrency:
-  group: ic-watch-scheduled
-  # Never allow two production announcers to race the persistent state.
+  group: ic-watch-live
+  # Never allow two announcers to race the persistent dedupe database.
   cancel-in-progress: false
 
 permissions:
@@ -52,15 +54,12 @@ jobs:
             exit 1
           fi
 
-      - name: Restore persistent dedupe state and daily run lock
+      - name: Restore persistent dedupe state
         id: state
         shell: bash
         run: |
           mkdir -p data
           git fetch origin bot-state:refs/remotes/origin/bot-state
-
-          LOCAL_DATE="$(TZ=Asia/Ho_Chi_Minh date +%F)"
-          echo "local_date=$LOCAL_DATE" >> "$GITHUB_OUTPUT"
 
           if git show origin/bot-state:state/ic_watch.db > data/ic_watch.db 2>/dev/null && [ -s data/ic_watch.db ]; then
             echo "baseline=false" >> "$GITHUB_OUTPUT"
@@ -71,48 +70,26 @@ jobs:
             echo "No persistent database yet. This run will baseline current items without sending them."
           fi
 
-          LAST_RUN="$(git show origin/bot-state:state/last_production_date.txt 2>/dev/null | tr -d '\r\n' || true)"
-          if [ "$LAST_RUN" = "$LOCAL_DATE" ]; then
-            echo "already_ran=true" >> "$GITHUB_OUTPUT"
-            echo "IC Watch production already ran for $LOCAL_DATE; Telegram announcement is disabled for this duplicate run."
-          else
-            echo "already_ran=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Run regression tests
         run: python -m unittest discover -s tests
 
       - name: Collect and announce
-        if: steps.state.outputs.already_ran != 'true'
         env:
           IC_WATCH_BASELINE_ONLY: ${{ steps.state.outputs.baseline }}
         run: python main.py
 
-      - name: Mark today's production run
-        if: success() && steps.state.outputs.already_ran != 'true'
-        shell: bash
-        run: |
-          echo "${{ steps.state.outputs.local_date }}" > data/last_production_date.txt
-
-      - name: Persist dedupe state and daily run lock
-        if: ${{ always() && steps.state.outputs.already_ran != 'true' && hashFiles('data/ic_watch.db') != '' }}
+      - name: Persist dedupe state
+        if: ${{ always() && hashFiles('data/ic_watch.db') != '' }}
         shell: bash
         run: |
           cp data/ic_watch.db /tmp/ic_watch.db
-          if [ -f data/last_production_date.txt ]; then
-            cp data/last_production_date.txt /tmp/last_production_date.txt
-          fi
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin bot-state:refs/remotes/origin/bot-state
           git switch -C bot-state-sync origin/bot-state
           mkdir -p state
           cp /tmp/ic_watch.db state/ic_watch.db
-          if [ -f /tmp/last_production_date.txt ]; then
-            cp /tmp/last_production_date.txt state/last_production_date.txt
-          fi
-          git add state/ic_watch.db state/last_production_date.txt 2>/dev/null || git add state/ic_watch.db
+          git add state/ic_watch.db
 
           if git diff --cached --quiet; then
             echo "Persistent state did not change."
